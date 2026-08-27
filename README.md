@@ -1,8 +1,8 @@
-# Paratuberculose GDS 32-65 - v1.2.0
+# Paratuberculose GDS 32-65 - v1.2.2
 
 Application PWA de suivi de la paratuberculose bovine.
 
-## v1.2.0 - moteur référentiel étendu
+## v1.2.2 - moteur référentiel étendu
 
 Le moteur d'aide à la décision s'appuie sur les documents intégrés de novembre 2025 :
 
@@ -38,3 +38,19 @@ La proposition reste une **aide à la décision à valider par le gestionnaire**
 - Paramètres
 
 Les non négatifs, descendants, animaux et analyses sont consultés dans la fiche de l'éleveur.
+
+
+## Correctifs v1.2.2
+- Campagne active initiale maintenue sur 2025/2026 tant que l’utilisateur ne la change pas explicitement.
+- Historique fourni chargé automatiquement au premier démarrage si la base locale est vide.
+- Recherche éleveur corrigée : saisie continue d’un EDE complet sans perte de focus à chaque chiffre.
+- Import historique étendu aux animaux 32/65.
+- Camembert des causes de sortie ajouté au bilan.
+
+
+## v1.2.2
+- Historique initial complet embarqué en JSON : 193 éleveurs, 1 959 campagnes, 2 165 non négatifs, 1 004 descendants, 1 414 introductions.
+- Restauration automatique au premier lancement de la version, plus bouton de restauration manuelle.
+- Campagne active conservée sur 2025/2026.
+- Correction des intitulés de colonnes lors d’un import Excel manuel.
+- Recherche EDE sans rechargement à chaque chiffre et camembert des causes de sortie conservés.
