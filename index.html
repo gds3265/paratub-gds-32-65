@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">PTB</span><div><strong>Paratuberculose</strong><small>GDS 32-65 · v1.0.0</small></div></div>
+    <div class="brand"><span class="brand-mark">PTB</span><div><strong>Paratuberculose</strong><small>GDS 32-65 · v1.1.0</small></div></div>
     <div class="top-actions">
       <select id="globalCampaign" title="Campagne active"></select>
       <button class="ghost" id="btnBackup">Sauvegarde JSON</button>
@@ -20,15 +20,12 @@
 
   <div class="app-shell">
     <nav class="sidebar" id="sidebar">
-      <button data-view="dashboard" class="nav-btn active">Accueil</button>
+      <button data-view="todo" class="nav-btn active">À traiter</button>
+      <button data-view="campaigns" class="nav-btn">Campagne</button>
       <button data-view="herds" class="nav-btn">Éleveurs</button>
-      <button data-view="campaigns" class="nav-btn">Campagnes</button>
-      <button data-view="analysis" class="nav-btn">Analyses</button>
-      <button data-view="animals" class="nav-btn">Animaux</button>
-      <button data-view="nonneg" class="nav-btn">Non négatifs</button>
-      <button data-view="introductions" class="nav-btn">Introductions</button>
-      <button data-view="exports" class="nav-btn">Exports & bilan</button>
       <button data-view="imports" class="nav-btn">Imports</button>
+      <button data-view="exports" class="nav-btn">Exports</button>
+      <button data-view="balance" class="nav-btn">Bilan & récap</button>
       <button data-view="settings" class="nav-btn">Paramètres</button>
     </nav>
 
