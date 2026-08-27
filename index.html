@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#8e2c6d" />
+  <title>Paratuberculose GDS 32-65</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">PTB</span><div><strong>Paratuberculose</strong><small>GDS 32-65 · v1.0.0</small></div></div>
+    <div class="top-actions">
+      <select id="globalCampaign" title="Campagne active"></select>
+      <button class="ghost" id="btnBackup">Sauvegarde JSON</button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar">
+      <button data-view="dashboard" class="nav-btn active">Accueil</button>
+      <button data-view="herds" class="nav-btn">Éleveurs</button>
+      <button data-view="campaigns" class="nav-btn">Campagnes</button>
+      <button data-view="analysis" class="nav-btn">Analyses</button>
+      <button data-view="animals" class="nav-btn">Animaux</button>
+      <button data-view="nonneg" class="nav-btn">Non négatifs</button>
+      <button data-view="introductions" class="nav-btn">Introductions</button>
+      <button data-view="exports" class="nav-btn">Exports & bilan</button>
+      <button data-view="imports" class="nav-btn">Imports</button>
+      <button data-view="settings" class="nav-btn">Paramètres</button>
+    </nav>
+
+    <main id="app" class="content"></main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal" class="modal" hidden><div class="modal-card"><button id="modalClose" class="modal-close">×</button><div id="modalBody"></div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
