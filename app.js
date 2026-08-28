@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.4 — local-first PWA */
-const APP_VERSION='1.2.4';
+/* Paratuberculose GDS 32-65 v1.2.5 — local-first PWA */
+const APP_VERSION='1.2.5';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -255,6 +255,7 @@ function decisionHTML(p){const cls=p.priority===1?'high':p.priority===2?'medium'
 function priorityScore(a){if(a.status==='TRAITÉ')return 99;if(a.positive>0)return 0;return 1}
 function priorityList(){const rows=[...analysisAggregate().values()].sort((a,b)=>priorityScore(a)-priorityScore(b)||String(a.lastUpdate).localeCompare(String(b.lastUpdate)));if(!rows.length)return'<div class="empty">Aucun résultat importé pour cette campagne.</div>';return`<div class="priority-list">${rows.map(a=>{const p=managementProposal(a.ede,a);const cls=a.status==='TRAITÉ'?'done':a.positive>0?'':'p2';return`<div class="priority-item ${cls}"><div class="priority-bar"></div><div class="priority-body"><div class="priority-title"><span>${esc(herdByEde(a.ede)?.name||a.ede)}</span><span class="badge ${a.positive>0?'red':'yellow'}">${a.positive>0?`${a.positive} positif(s)`:'Résultat à valider'}</span></div><div class="priority-meta">EDE ${esc(a.ede)} · ${a.tested} dépistés · ${a.negative} négatifs · ${fmtDate(a.last)} · ${esc(p.caseRef)}</div><div class="mini">${esc(p.qualification)} · N+1 : ${esc(p.nextScreening)}</div></div><div class="priority-action"><button class="primary" data-herd="${esc(a.ede)}">Ouvrir</button></div></div>`}).join('')}</div>`}
 function campaignStatus(c,a){if(a){if(a.status==='TRAITÉ')return'<span class="status-dot received"></span>Traité';if(a.positive>0)return'<span class="status-dot positive"></span>Positif à traiter';return'<span class="status-dot todo"></span>Reçu - à valider'}if(isIntermediateCampaign(c))return'<span class="status-dot received"></span>Année intermédiaire - pas de dépistage';if(num(c?.tested)>0)return'<span class="status-dot received"></span>Résultat historique enregistré';return'<span class="status-dot"></span>Résultat non reçu'}
+function kpi(label,value,sub=''){return`<div class="kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`}
 function pie(value,total,c1='#8e2c6d',c2='#e7eaec'){const pct=total?Math.max(0,Math.min(100,value/total*100)):0;return`<div class="pie" style="background:conic-gradient(${c1} 0 ${pct}%,${c2} ${pct}% 100%)"></div>`}
 
 const views={

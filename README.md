@@ -1,6 +1,12 @@
-# Paratuberculose GDS 32-65 - v1.2.4
+# Paratuberculose GDS 32-65 - v1.2.5
 
 Application PWA de suivi de la paratuberculose bovine.
+
+## Correctif v1.2.5
+- Corrige l’erreur de démarrage `kpi is not defined`.
+- Rétablit l’ouverture des fiches éleveurs, de la campagne, du bilan et des autres vues.
+- Ne force pas une nouvelle restauration de l’historique v1.2.4 : les données locales et modifications déjà présentes sont conservées.
+- Nouveau cache PWA `ptb-gds-v1.2.5` pour forcer le chargement du code corrigé.
 
 ## v1.2.4 - moteur référentiel étendu
 
