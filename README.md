@@ -1,8 +1,8 @@
-# Paratuberculose GDS 32-65 - v1.2.2
+# Paratuberculose GDS 32-65 - v1.2.3
 
 Application PWA de suivi de la paratuberculose bovine.
 
-## v1.2.2 - moteur référentiel étendu
+## v1.2.3 - moteur référentiel étendu
 
 Le moteur d'aide à la décision s'appuie sur les documents intégrés de novembre 2025 :
 
@@ -40,7 +40,7 @@ La proposition reste une **aide à la décision à valider par le gestionnaire**
 Les non négatifs, descendants, animaux et analyses sont consultés dans la fiche de l'éleveur.
 
 
-## Correctifs v1.2.2
+## Correctifs v1.2.3
 - Campagne active initiale maintenue sur 2025/2026 tant que l’utilisateur ne la change pas explicitement.
 - Historique fourni chargé automatiquement au premier démarrage si la base locale est vide.
 - Recherche éleveur corrigée : saisie continue d’un EDE complet sans perte de focus à chaque chiffre.
@@ -48,9 +48,17 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Camembert des causes de sortie ajouté au bilan.
 
 
-## v1.2.2
+## v1.2.3
 - Historique initial complet embarqué en JSON : 193 éleveurs, 1 959 campagnes, 2 165 non négatifs, 1 004 descendants, 1 414 introductions.
 - Restauration automatique au premier lancement de la version, plus bouton de restauration manuelle.
 - Campagne active conservée sur 2025/2026.
 - Correction des intitulés de colonnes lors d’un import Excel manuel.
 - Recherche EDE sans rechargement à chaque chiffre et camembert des causes de sortie conservés.
+
+
+## v1.2.3
+- Historique embarqué directement dans `history_seed.js` : plus de dépendance au chargement du sous-dossier `migration` au démarrage.
+- 193 éleveurs, 1 959 campagnes, 2 165 non négatifs, 1 004 descendants et 1 414 introductions intégrés.
+- 3 964 bovins 32/65 intégrés depuis les derniers exports disponibles.
+- Campagne active par défaut : 2025/2026.
+- Le bouton de restauration réinjecte l’ensemble de ces données dans IndexedDB.
