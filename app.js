@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.5 — local-first PWA */
-const APP_VERSION='1.2.5';
+/* Paratuberculose GDS 32-65 v1.2.6 — local-first PWA */
+const APP_VERSION='1.2.6';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
