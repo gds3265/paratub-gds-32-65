@@ -102,7 +102,7 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Période rappelée dans le titre et les légendes du bilan.
 
 
-## v1.2.11
+## v1.2.12
 - Bilan borné sur la campagne sélectionnée : ajout du nombre de non négatifs détectés dont la mère était déjà connue non négative.
 - Détection basée sur le champ historique, les liens descendants et, lorsque disponible, l'identifiant de la mère dans les imports animaux.
 - Champ modifiable dans la fiche d'un non négatif : « Mère déjà connue non négative ? ».
