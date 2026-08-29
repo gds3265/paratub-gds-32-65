@@ -2,75 +2,43 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.5, maximum-scale=3, user-scalable=yes, viewport-fit=cover" />
-  <meta name="theme-color" content="#b53670" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Audit Bovin" />
-  <link rel="manifest" href="./manifest.webmanifest?v=14.6.21.68" crossorigin="use-credentials" />
-  <link rel="apple-touch-icon" href="icon-192.png?v=14.6.21.68" />
-  <link rel="stylesheet" href="styles.css?v=14.6.21.68" />
-  <title>Audit Bovin GDS 32-65</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#8e2c6d" />
+  <title>Paratuberculose GDS 32-65</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="./ptb-icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="auth-locked">
-  <header class="app-header">
-    <div class="brand-wrap">
-      <img src="icon-192.png?v=14.6.21.68" class="brand-icon" alt="" />
-      <div>
-        <h1>Audit Bovin GDS 32-65</h1>
-        <p>Gestion des exploitations, visites, sujets et raisonnement transparent</p>
-      </div>
+<body>
+  <header class="topbar">
+    <div class="brand"><img class="brand-logo" src="./ptb-icon-192.png" alt="PTB 32 65" /><div><strong>Paratuberculose</strong><small>GDS 32-65 · v1.2.15</small></div></div>
+    <div class="top-actions">
+      <select id="globalCampaign" title="Campagne active"></select>
+      <button class="ghost install-btn" id="btnInstall" type="button">Installer l’appli</button>
+      <button class="ghost" id="btnBackup">Sauvegarde JSON</button>
     </div>
-    <div class="header-tools"><span class="version">v14.6.21.68</span></div>
   </header>
 
-  <div class="workflow-nav" aria-label="Phases de visite">
-    <button class="phase-btn active" data-phase="prepare">1 · 📋 Préparation</button>
-    <button class="phase-btn" data-phase="terrain">2 · 🐄 Terrain</button>
-    <button class="phase-btn" data-phase="report">3 · 📊 Analyse & restitution</button>
-    <button class="phase-btn" data-phase="follow">4 · 📈 Suivi & impact</button>
-    <span class="workflow-tools" aria-label="Outils"><button class="nav-btn compact-tool" data-view="planches" title="Bibliothèque" aria-label="Bibliothèque">📚</button><button class="nav-btn compact-tool" data-view="references" title="Paramètres & seuils" aria-label="Paramètres & seuils">⚙️</button><button class="nav-btn compact-tool" data-view="backup" title="Sauvegarde" aria-label="Sauvegarde">💾</button></span>
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar">
+      <button data-view="todo" class="nav-btn active">À traiter</button>
+      <button data-view="campaigns" class="nav-btn">Campagne</button>
+      <button data-view="herds" class="nav-btn">Éleveurs</button>
+      <button data-view="imports" class="nav-btn">Imports</button>
+      <button data-view="exports" class="nav-btn">Exports</button>
+      <button data-view="balance" class="nav-btn">Bilan & récap</button>
+      <button data-view="settings" class="nav-btn">Paramètres</button>
+    </nav>
+
+    <main id="app" class="content"></main>
   </div>
-  <nav class="top-nav" aria-label="Navigation principale">
-    <button class="nav-btn active" data-phase-item="prepare" data-view="dashboard">🏠 Accueil</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="farms">👨‍🌾 Exploitations</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="visits">📅 Visites</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="documents">📁 Documents</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="herddata">📊 Imports / technico-éco</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="questionnaires">📨 Pré-questionnaire</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="prepprint">🖨️ Documents imprimables</button>
-    <button class="nav-btn" data-phase-item="prepare" data-view="followup">📈 Historique</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="animals">🐄 Animaux</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="analysis">📏 Mesures</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="feeding">🍽️ Alimentation</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="building">🏠 Bâtiment / eau</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="audit">📋 Questions terrain</button>
-    <button class="nav-btn" data-phase-item="follow" data-view="journal">📒 Journal / observations</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="photos">📷 Photos</button>
-    <button class="nav-btn" data-phase-item="terrain" data-view="checkout">✅ Check-up fin de visite</button>
-    <button class="nav-btn" data-phase-item="report" data-view="nutrition">🧪 Analyse nutritionnelle</button>
-    <button class="nav-btn" data-phase-item="report" data-view="reproduction">🐄 Reproduction</button>
-    <button class="nav-btn" data-phase-item="report" data-view="metabolic">🧬 Profil métabolique</button>
-    <button class="nav-btn" data-phase-item="report" data-view="parasitism">🦠 Parasitisme</button>
-    <button class="nav-btn" data-phase-item="report" data-view="waterlab">💧 Analyse d’eau</button>
-    <button class="nav-btn" data-phase-item="report" data-view="assistant">🧠 Analyse & interprétation</button>
-    <button class="nav-btn" data-phase-item="report" data-view="pilotage">🎯 Plan d’action</button>
-    <button class="nav-btn" data-phase-item="report" data-view="reports">📄 Restitution</button>
-    <button class="nav-btn" data-phase-item="report" data-view="review">👥 Relecture collègue</button>
-    <button class="nav-btn" data-phase-item="follow" data-view="study">📁 Suivi de l’étude</button>
-    <button class="nav-btn" data-phase-item="follow" data-view="economy">💶 Marge de progrès</button>
-  </nav>
 
-  <main id="app" class="app-main" tabindex="-1"></main>
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal" class="modal" hidden><div class="modal-card"><button id="modalClose" class="modal-close">×</button><div id="modalBody"></div></div></div>
 
-  <template id="toast-template">
-    <div class="toast" role="status"></div>
-  </template>
-
-  <input id="json-file-input" type="file" accept="application/json,.json" hidden />
-
-  <script src="jszip.min.js?v=14.6.21.68"></script>
-  <script type="module" src="app.js?v=14.6.21.68"></script>
-  <script src="cloud-sync.js?v=14.6.21.68"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="history_seed.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
