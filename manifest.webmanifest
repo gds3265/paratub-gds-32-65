@@ -1,9 +1,16 @@
 {
+  "id":"./",
   "name":"Paratuberculose GDS 32-65",
-  "short_name":"PTB GDS",
+  "short_name":"PTB 32 65",
+  "description":"Suivi paratuberculose bovine GDS 32-65",
   "start_url":"./",
+  "scope":"./",
   "display":"standalone",
   "background_color":"#f5f6f8",
   "theme_color":"#8e2c6d",
-  "icons":[{"src":"icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "icons":[
+    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
 }

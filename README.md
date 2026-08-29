@@ -114,3 +114,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Fiche éleveur 32 : suivi remboursement analyses (facture reçue, date de réception, année 1 à 4, date de réponse à la comptabilité).
 - Supabase multi-support : connexion e-mail/mot de passe, rôles Lecture / Écriture / Admin, récupération et envoi de la base cloud, administration des rôles par un compte admin.
 - Les comptes Lecture sont bloqués sur les principaux écrans de modification/import.
+
+
+## v1.2.14
+- Nouveau logo PTB 32 65 intégré.
+- Icônes PWA PNG 192x192, 512x512 et maskable 512x512.
+- Icône Apple Touch pour installation sur iPhone/iPad.
+- Manifest PWA renforcé (id, scope, icônes any/maskable).
+- Logo affiché dans l’en-tête de l’application.
