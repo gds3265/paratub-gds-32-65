@@ -1,36 +1,43 @@
 {
-  "id": "./",
-  "name": "Paratuberculose GDS 32-65",
-  "short_name": "PTB 32 65",
-  "description": "Suivi paratuberculose bovine GDS 32-65",
-  "start_url": "./index.html",
-  "scope": "./",
+  "name": "Audit Bovin GDS 32-65",
+  "short_name": "Audit Bovin",
+  "start_url": "/audit-bovin-gds-32-65-v2/?source=pwa&v=14.6.21.39",
   "display": "standalone",
-  "display_override": [
-    "standalone",
-    "minimal-ui"
-  ],
-  "background_color": "#f5f6f8",
-  "theme_color": "#8e2c6d",
-  "prefer_related_applications": false,
+  "background_color": "#fff6fa",
+  "theme_color": "#b53670",
+  "description": "Application sécurisée réservée aux techniciens autorisés du GDS 32-65, avec authentification obligatoire, fonctionnement hors ligne sur appareil déjà authentifié, synchronisation Supabase, sauvegardes automatiques et thème rose.",
   "icons": [
     {
-      "src": "./ptb-icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./ptb-icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./ptb-icon-maskable-512.png",
+      "src": "icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/audit-bovin-gds-32-65-v2/",
+  "scope": "/audit-bovin-gds-32-65-v2/",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "prefer_related_applications": false
 }

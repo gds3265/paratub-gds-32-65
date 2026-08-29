@@ -1,0 +1,8 @@
+Contrôle documentaire v14.6.21.68
+- Pré-questionnaire : filtre les informations déjà connues/importées.
+- Questionnaire reproduction enrichi : chaleurs, retours, taureaux/lots, fertilité, événements.
+- Bilan imprimable pré-visite : structure, âge moyen/maxi, IVV, mortalité, paternité, vaches à problème avec motifs, chronologie croisée, estimation économique.
+- Rapport technique/expert : reproduction, audit, données technico-éco et analyses conservés.
+- Rapport éleveur : synthèse + actions, sans surcharge technique.
+- Excel partenaire : feuille Suivi tps et budget protégée de toute écriture.
+- Notices administrateur + technicien incluses.

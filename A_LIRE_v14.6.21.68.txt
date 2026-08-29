@@ -1,0 +1,9 @@
+AUDIT BOVIN GDS 32-65 — v14.6.21.68
+
+Mise à jour documentaire et cohérence des supports :
+- questionnaires éleveur alignés avec les imports : les données déjà connues/calculées ne sont plus redemandées ;
+- enquête reproduction enrichie : chaleurs, retours, taureaux, lots, fertilité, durée de contact, événements sanitaires/alimentaires ;
+- imprimable pré-visite reproduction/mortalité enrichi avec structure d'âge et estimation économique ;
+- notices administrateur et conduite d'audit mises à jour et incluses dans le ZIP.
+
+Les fichiers météo 32/65 restent inclus à la racine.

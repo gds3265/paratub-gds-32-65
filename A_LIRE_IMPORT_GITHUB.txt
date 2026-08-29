@@ -1,0 +1,10 @@
+MISE À JOUR GITHUB — Audit Bovin v14.6.21.60
+
+1. Décompresser le ZIP.
+2. Dans GitHub > Add file > Upload files, déposer tout le contenu extrait, y compris le dossier /meteo.
+3. Laisser GitHub remplacer les fichiers portant le même nom.
+4. Ne pas supprimer les autres fichiers déjà présents dans le dépôt.
+5. Valider le commit puis forcer le rafraîchissement de l'application (Ctrl+F5 sur PC ou fermer/réouvrir la PWA).
+
+IMPORTANT POUR LA MÉTÉO
+Le dossier /meteo contient les 4 fichiers RR-T-Vent 32 et 65 fournis le 28/08/2026. Il doit être envoyé avec le reste.
