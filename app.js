@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.14 — PWA multi-support */
-const APP_VERSION='1.2.14';
+/* Paratuberculose GDS 32-65 v1.2.15 — PWA multi-support */
+const APP_VERSION='1.2.15';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -520,5 +520,39 @@ async function pushSupabase(){try{if(!cloudLoggedIn())throw new Error('Connecte-
 async function pullSupabase(){try{if(!cloudLoggedIn())throw new Error('Connecte-toi d’abord');const rows=await supabaseRequest('ptb_records?select=dataset,id,payload',{method:'GET'});if(!rows?.length){toast('Base cloud vide : aucune donnée remplacée');return}for(const s of STORES)if(s!=='meta')await db.clear(s);for(const r of rows){const target=r.dataset==='meta'?'meta':r.dataset;if(STORES.includes(target)){if(target==='meta'&&r.payload?.id==='supabaseKey')continue;await db.put(target,r.payload)}}await loadState();render();toast('Données cloud récupérées')}catch(e){console.error(e);toast('Supabase : '+e.message)}}
 async function loadCloudUsers(){try{const rows=await supabaseRequest('ptb_user_profiles?select=id,email,role,active&order=email.asc',{method:'GET'});const box=$('#cloudUsers');if(!box)return;box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>E-mail</th><th>Rôle</th><th>Actif</th></tr></thead><tbody>${rows.map(u=>`<tr><td>${esc(u.email||u.id)}</td><td><select class="cloud-role" data-uid="${esc(u.id)}"><option value="read" ${u.role==='read'?'selected':''}>Lecture</option><option value="write" ${u.role==='write'?'selected':''}>Écriture</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></td><td><input class="cloud-active" data-uid="${esc(u.id)}" type="checkbox" ${u.active!==false?'checked':''}></td></tr>`).join('')}</tbody></table></div>`;$$('.cloud-role',box).forEach(el=>el.onchange=()=>updateCloudUser(el.dataset.uid,{role:el.value}));$$('.cloud-active',box).forEach(el=>el.onchange=()=>updateCloudUser(el.dataset.uid,{active:el.checked}))}catch(e){const box=$('#cloudUsers');if(box)box.innerHTML=`<div class="error">${esc(e.message)}</div>`}}
 async function updateCloudUser(id,patch){if(!isAdmin())return;try{await supabaseRequest(`ptb_user_profiles?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(patch)});toast('Droits mis à jour')}catch(e){toast('Droits : '+e.message)}}
-async function init(){await db.open();await loadState();await restoreAuth();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});render()}
+
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  const b=document.getElementById('btnInstall');
+  if(b){b.textContent='Installer l’appli';b.disabled=false;}
+});
+window.addEventListener('appinstalled',()=>{
+  deferredInstallPrompt=null;
+  const b=document.getElementById('btnInstall');
+  if(b){b.textContent='Appli installée';b.disabled=true;}
+});
+function isStandaloneMode(){
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone===true;
+}
+async function installApp(){
+  if(isStandaloneMode()){
+    toast('L’application est déjà installée sur cet appareil.');
+    return;
+  }
+  if(deferredInstallPrompt){
+    const p=deferredInstallPrompt;
+    deferredInstallPrompt=null;
+    await p.prompt();
+    try{await p.userChoice}catch(e){}
+    return;
+  }
+  const ua=navigator.userAgent||'';
+  if(/iphone|ipad|ipod/i.test(ua)) toast('Sur iPhone/iPad : Partager → Sur l’écran d’accueil.');
+  else if(/android/i.test(ua)) toast('Dans Chrome : menu ⋮ → Installer l’application / Ajouter à l’écran d’accueil.');
+  else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
+}
+
+async function init(){await db.open();await loadState();await restoreAuth();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});

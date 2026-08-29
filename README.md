@@ -122,3 +122,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Icône Apple Touch pour installation sur iPhone/iPad.
 - Manifest PWA renforcé (id, scope, icônes any/maskable).
 - Logo affiché dans l’en-tête de l’application.
+
+
+## v1.2.15
+- Icônes PWA déplacées aussi à la racine pour GitHub Pages.
+- Manifest et service worker corrigés.
+- Bouton « Installer l’appli » ajouté dans l’en-tête avec prompt natif quand disponible et aide de secours sinon.
