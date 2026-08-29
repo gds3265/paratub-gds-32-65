@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.15 — PWA multi-support */
-const APP_VERSION='1.2.15';
+/* Paratuberculose GDS 32-65 v1.2.16 — PWA multi-support */
+const APP_VERSION='1.2.16';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -554,5 +554,5 @@ async function installApp(){
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});render()}
+async function init(){await db.open();await loadState();await restoreAuth();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
