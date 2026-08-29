@@ -124,14 +124,22 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Logo affiché dans l’en-tête de l’application.
 
 
-## v1.2.16
+## v1.2.17
 - Icônes PWA déplacées aussi à la racine pour GitHub Pages.
 - Manifest et service worker corrigés.
 - Bouton « Installer l’appli » ajouté dans l’en-tête avec prompt natif quand disponible et aide de secours sinon.
 
-## v1.2.16 - identité PWA PTB distincte
+## v1.2.17 - identité PWA PTB distincte
 - Donne à l'application PTB 32-65 une identité PWA unique (`id` dédié) pour éviter toute confusion avec une autre PWA GDS, notamment Vaccination DNC.
 - `start_url` propre à PTB 32-65.
 - Manifest et icônes versionnés pour contourner les anciens caches navigateur.
-- Service worker v1.2.16 avec activation immédiate et mise à jour sans cache.
+- Service worker v1.2.17 avec activation immédiate et mise à jour sans cache.
 - Le nettoyage du cache est limité aux caches `ptb-gds-*` afin de ne pas supprimer les caches d'autres applications.
+
+
+## v1.2.17 - isolation PWA stricte
+- Identité PWA absolue : `/paratub-gds-32-65/`.
+- `start_url` et `scope` limités strictement au dossier Paratube.
+- Service worker enregistré explicitement avec le même scope.
+- Le service worker ignore toute URL hors du dossier Paratube.
+- Aucun changement sur les autres applications GitHub Pages.

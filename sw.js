@@ -1,5 +1,18 @@
-const CACHE='ptb-gds-v1.2.16';
-const CORE=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./ptb-icon-192.png','./ptb-icon-512.png','./ptb-icon-maskable-512.png','./apple-touch-icon.png','./history_seed.js','./migration/history_seed.json'];
+const CACHE='ptb-gds-v1.2.17';
+const BASE='/paratub-gds-32-65/';
+const CORE=[
+  BASE,
+  BASE+'index.html',
+  BASE+'styles.css',
+  BASE+'app.js',
+  BASE+'manifest.webmanifest',
+  BASE+'ptb-icon-192.png',
+  BASE+'ptb-icon-512.png',
+  BASE+'ptb-icon-maskable-512.png',
+  BASE+'apple-touch-icon.png',
+  BASE+'history_seed.js',
+  BASE+'migration/history_seed.json'
+];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
@@ -17,14 +30,14 @@ self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
   const req=event.request;
   const url=new URL(req.url);
+  if(url.origin!==self.location.origin || !url.pathname.startsWith(BASE)) return;
 
-  // Documents and manifest: prefer network so an old PWA/service worker cannot keep stale identity.
-  if(req.mode==='navigate' || url.pathname.endsWith('/manifest.webmanifest')){
+  if(req.mode==='navigate' || url.pathname===BASE+'manifest.webmanifest'){
     event.respondWith(
       fetch(req).then(resp=>{
         if(resp && resp.status===200){const clone=resp.clone();caches.open(CACHE).then(c=>c.put(req,clone));}
         return resp;
-      }).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
+      }).catch(()=>caches.match(req).then(r=>r||caches.match(BASE+'index.html')))
     );
     return;
   }
