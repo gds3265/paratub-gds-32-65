@@ -84,3 +84,12 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Conservation du correctif `kpi` qui débloque le démarrage, les fiches éleveurs et le bilan.
 - Nouveau cache PWA `ptb-gds-v1.2.7`.
 - Aucune réinitialisation volontaire des données locales ou de l’historique.
+
+## v1.2.8
+- Fiche éleveur réorganisée autour de 3 cadres de gestion : Non négatifs, Descendants, Introductions.
+- Introductions affichées uniquement pour les cheptels Garantie.
+- Non négatifs modifiables : résultats, PCR, PS2, conclusion, réforme, présence, sortie, cause, décision et contrôle N+1.
+- Descendants et introductions ajoutables/modifiables/supprimables.
+- Liste brute des animaux déplacée derrière un bouton « Voir les animaux ».
+- Bilan clarifié : légendes explicites des camemberts, dénominateurs affichés, compteur positifs séparé sans camembert trompeur.
+- Export Excel complet de la base : CHEPTELS, CAMPAGNES, NON_NEGATIFS, DESCENDANTS, INTRODUCTIONS, ANIMAUX, ANALYSES_LOTS, TRAITEMENTS, PARAMETRES.
