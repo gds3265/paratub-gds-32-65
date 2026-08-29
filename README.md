@@ -85,7 +85,7 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Nouveau cache PWA `ptb-gds-v1.2.7`.
 - Aucune réinitialisation volontaire des données locales ou de l’historique.
 
-## v1.2.8
+## v1.2.10
 - Fiche éleveur réorganisée autour de 3 cadres de gestion : Non négatifs, Descendants, Introductions.
 - Introductions affichées uniquement pour les cheptels Garantie.
 - Non négatifs modifiables : résultats, PCR, PS2, conclusion, réforme, présence, sortie, cause, décision et contrôle N+1.
@@ -93,3 +93,17 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Liste brute des animaux déplacée derrière un bouton « Voir les animaux ».
 - Bilan clarifié : légendes explicites des camemberts, dénominateurs affichés, compteur positifs séparé sans camembert trompeur.
 - Export Excel complet de la base : CHEPTELS, CAMPAGNES, NON_NEGATIFS, DESCENDANTS, INTRODUCTIONS, ANIMAUX, ANALYSES_LOTS, TRAITEMENTS, PARAMETRES.
+
+
+## v1.2.10
+- Bilans bornés explicitement du 1er juillet au 30 juin selon la campagne sélectionnée.
+- Compteur unique des non négatifs détectés pendant la campagne.
+- Causes de sortie calculées uniquement sur les non négatifs sortis pendant la période de campagne.
+- Période rappelée dans le titre et les légendes du bilan.
+
+
+## v1.2.11
+- Bilan borné sur la campagne sélectionnée : ajout du nombre de non négatifs détectés dont la mère était déjà connue non négative.
+- Détection basée sur le champ historique, les liens descendants et, lorsque disponible, l'identifiant de la mère dans les imports animaux.
+- Champ modifiable dans la fiche d'un non négatif : « Mère déjà connue non négative ? ».
+- Cache PWA et numéro de version incrémentés.
