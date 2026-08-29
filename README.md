@@ -1,12 +1,12 @@
-# Paratuberculose GDS 32-65 - v1.2.6
+# Paratuberculose GDS 32-65 - v1.2.7
 
 Application PWA de suivi de la paratuberculose bovine.
 
-## Correctif v1.2.6
+## Correctif v1.2.7
 - Corrige l’erreur de démarrage `kpi is not defined`.
 - Rétablit l’ouverture des fiches éleveurs, de la campagne, du bilan et des autres vues.
 - Ne force pas une nouvelle restauration de l’historique v1.2.4 : les données locales et modifications déjà présentes sont conservées.
-- Nouveau cache PWA `ptb-gds-v1.2.6` pour forcer le chargement du code corrigé.
+- Nouveau cache PWA `ptb-gds-v1.2.7` pour forcer le chargement du code corrigé.
 
 ## v1.2.4 - moteur référentiel étendu
 
@@ -79,8 +79,8 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Exemple 65216002 2024/2025 corrigé : 57 + 13 + 4 = 74 prélèvements.
 
 
-## Correctif v1.2.6
+## Correctif v1.2.7
 - Version distincte de la v1.2.5 pour éviter tout conflit de cache/version.
 - Conservation du correctif `kpi` qui débloque le démarrage, les fiches éleveurs et le bilan.
-- Nouveau cache PWA `ptb-gds-v1.2.6`.
+- Nouveau cache PWA `ptb-gds-v1.2.7`.
 - Aucune réinitialisation volontaire des données locales ou de l’historique.

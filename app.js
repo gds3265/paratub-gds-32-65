@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.6 — local-first PWA */
-const APP_VERSION='1.2.6';
+/* Paratuberculose GDS 32-65 v1.2.7 — local-first PWA */
+const APP_VERSION='1.2.7';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -57,7 +57,18 @@ function herdByEde(ede){return state.herds.find(h=>String(h.ede)===String(ede))}
 function historyFor(ede){return state.campaigns.filter(c=>String(c.ede)===String(ede)).sort((a,b)=>String(b.campaign).localeCompare(String(a.campaign)))}
 function activeAnimals(ede){return state.animals.filter(a=>String(a.ede)===String(ede))}
 
-function render(){populateCampaignSelector(); $$('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); const fn=views[state.view]||views.todo; $('#app').innerHTML=fn(); bindView()}
+function render(){
+  populateCampaignSelector();
+  $$('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
+  try{
+    const fn=views[state.view]||views.todo;
+    $('#app').innerHTML=fn();
+    bindView();
+  }catch(e){
+    console.error('Erreur affichage',state.view,e);
+    $('#app').innerHTML=`<div class="error"><b>Erreur d’affichage :</b> ${esc(e.message||e)}<br><span class="help">La navigation reste disponible à gauche. Aucun enregistrement n’a été supprimé.</span></div>`;
+  }
+}
 const pageHead=(title,sub='',actions='')=>`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${actions}</div></div>`;
 const badgeMode=m=>m?`<span class="badge ${norm(m).includes('garantie')?'garantie':'ass'}">${esc(m)}</span>`:'';
 
@@ -257,6 +268,10 @@ function priorityList(){const rows=[...analysisAggregate().values()].sort((a,b)=
 function campaignStatus(c,a){if(a){if(a.status==='TRAITÉ')return'<span class="status-dot received"></span>Traité';if(a.positive>0)return'<span class="status-dot positive"></span>Positif à traiter';return'<span class="status-dot todo"></span>Reçu - à valider'}if(isIntermediateCampaign(c))return'<span class="status-dot received"></span>Année intermédiaire - pas de dépistage';if(num(c?.tested)>0)return'<span class="status-dot received"></span>Résultat historique enregistré';return'<span class="status-dot"></span>Résultat non reçu'}
 function kpi(label,value,sub=''){return`<div class="kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`}
 function pie(value,total,c1='#8e2c6d',c2='#e7eaec'){const pct=total?Math.max(0,Math.min(100,value/total*100)):0;return`<div class="pie" style="background:conic-gradient(${c1} 0 ${pct}%,${c2} ${pct}% 100%)"></div>`}
+
+function nonNegTableForHerd(rows){const ai=animalIndex();if(!rows.length)return'<div class="empty">Aucun non négatif enregistré.</div>';return`<div class="table-wrap"><table><thead><tr><th>Campagne</th><th>Animal</th><th>Nom / travail</th><th>Résultat</th><th>Date</th><th>PS2</th><th>PCR</th><th>Conclusion</th><th>Réforme</th><th>Présence</th><th>Sortie</th></tr></thead><tbody>${rows.map(n=>{const a=ai.get(String(n.animalId));return`<tr><td>${esc(n.campaign||'')}</td><td>${esc(n.animalId)}</td><td>${esc(a?.name||n.name||'')} ${a?.workNo?`(${esc(a.workNo)})`:''}</td><td>${esc(n.result||'')}</td><td>${fmtDate(n.date)}</td><td>${esc(n.repeatSerology||'')}</td><td>${esc(n.pcrResult||'')}</td><td>${esc(n.conclusion||'')}</td><td>${esc(n.reformStatus||'')}</td><td>${esc(a?.presence||n.presence||'')}</td><td>${fmtDate(a?.exitDate||n.exitDate)}</td></tr>`}).join('')}</tbody></table></div>`}
+function statusBadge(s){return`<span class="badge ${s==='POSITIF À TRAITER'?'red':s==='À TRAITER'?'yellow':'green'}">${esc(s||'')}</span>`}
+function analysisTable(rows){if(!rows.length)return'<div class="empty">Aucune analyse pour cette campagne.</div>';return`<div class="table-wrap"><table><thead><tr><th>EDE</th><th>Éleveur</th><th>Lots</th><th>Prélèvement</th><th>Dépistés</th><th>Négatifs</th><th>Positifs</th><th>Dernière MAJ</th><th>Statut</th><th></th></tr></thead><tbody>${rows.map(a=>`<tr><td>${esc(a.ede)}</td><td class="click-row" data-herd="${esc(a.ede)}">${esc(herdByEde(a.ede)?.name||'')}</td><td>${a.lots||0}</td><td>${fmtDate(a.last)}</td><td>${a.tested||0}</td><td>${a.negative||0}</td><td><strong>${a.positive||0}</strong></td><td>${fmtDate(a.lastUpdate)}</td><td>${statusBadge(a.status||'')}</td><td><button class="ghost analysis-treat" data-ede="${esc(a.ede)}">Traiter</button></td></tr>`).join('')}</tbody></table></div>`}
 
 const views={
  todo(){const ag=[...analysisAggregate().values()],pos=ag.filter(x=>x.positive>0).length,todo=ag.filter(x=>x.status!=='TRAITÉ').length;return pageHead('À traiter',`Priorités - campagne ${esc(state.campaign)}`,`<button class="primary" data-go="imports">Importer des résultats</button>`)+`<div class="grid kpi-grid">${kpi('Résultats reçus',ag.length,`${state.herds.length} engagés`)}${kpi('À traiter',todo,'dossiers ouverts')}${kpi('Cheptels positifs',pos,'priorité haute')}${kpi('Traités',ag.filter(x=>x.status==='TRAITÉ').length,'validés')}</div><div class="card"><h2>File de traitement</h2><p class="help">Les positifs sont placés en tête. La proposition de gestion s’appuie sur les référentiels novembre 2025 et doit être validée avant application.</p>${priorityList()}</div>`},
