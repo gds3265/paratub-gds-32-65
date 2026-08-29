@@ -16,3 +16,6 @@
 /* v1.2.8 */
 .herd-management-grid{display:grid;grid-template-columns:1fr;gap:14px}.management-panel{min-width:0}.management-panel .table-wrap{max-height:420px}.charts-two{grid-template-columns:repeat(2,minmax(0,1fr))}.legend-items.vertical{display:grid;gap:5px}.positive-summary{background:#fffafa;border-left:4px solid #c62828}.positive-summary p{margin:6px 0}.nn-edit,.desc-edit,.intro-edit{cursor:pointer}.nn-edit:hover,.desc-edit:hover,.intro-edit:hover{background:#f8edf4}
 @media(max-width:900px){.charts-two{grid-template-columns:1fr}}
+
+.reimbursement-box{margin-top:14px;padding:14px;border:1px solid #ead5e3;border-radius:12px;background:#fff8fc}
+.reimbursement-box h3{margin-top:0}.cloud-user{margin:14px 0;padding:10px 12px;background:#f7f3f6;border-radius:10px}.auth-box{margin-top:14px}.user-admin{margin-top:18px}.cause-chart-row{grid-template-columns:repeat(auto-fit,minmax(360px,1fr))}

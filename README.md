@@ -102,8 +102,15 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Période rappelée dans le titre et les légendes du bilan.
 
 
-## v1.2.12
+## v1.2.13
 - Bilan borné sur la campagne sélectionnée : ajout du nombre de non négatifs détectés dont la mère était déjà connue non négative.
 - Détection basée sur le champ historique, les liens descendants et, lorsque disponible, l'identifiant de la mère dans les imports animaux.
 - Champ modifiable dans la fiche d'un non négatif : « Mère déjà connue non négative ? ».
 - Cache PWA et numéro de version incrémentés.
+
+
+## v1.2.13
+- Bilan : camembert des causes de sortie des descendants de bovins non négatifs, borné sur la campagne (1er juillet - 30 juin), avec nombres et pourcentages.
+- Fiche éleveur 32 : suivi remboursement analyses (facture reçue, date de réception, année 1 à 4, date de réponse à la comptabilité).
+- Supabase multi-support : connexion e-mail/mot de passe, rôles Lecture / Écriture / Admin, récupération et envoi de la base cloud, administration des rôles par un compte admin.
+- Les comptes Lecture sont bloqués sur les principaux écrans de modification/import.
