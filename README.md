@@ -143,3 +143,18 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Service worker enregistré explicitement avec le même scope.
 - Le service worker ignore toute URL hors du dossier Paratube.
 - Aucun changement sur les autres applications GitHub Pages.
+
+
+## v1.2.18 - cohérence résultats historiques + programmation N+1
+- La fiche éleveur utilise désormais le résultat historique de la campagne active lorsqu'aucun import d'analyses récent n'est chargé.
+- Un cheptel avec des résultats historiques (ex. 33 négatifs) n'est plus affiché comme « Résultats non reçus » dans l'assistant.
+- Les qualifications numériques/anciennes devenues incohérentes sont remplacées à l'affichage par le statut enregistré dans la campagne active lorsqu'il est plus récent et explicite.
+- Nouvel onglet « Programmation N+1 » avec listes Année intermédiaire, >24 mois, 24-72 mois et À vérifier, filtres 32/65, mode et recherche.
+- Export CSV de toute la programmation de la campagne suivante.
+
+
+## v1.2.19
+- reprend toutes les corrections de la v1.2.18 (historique utilisé comme résultat de campagne à défaut d’import récent, affichage des qualifications historiques obsolètes, programmation N+1) ;
+- ajoute un onglet Référentiels accessible en permanence ;
+- intègre des accès directs au Référentiel statut favorable v3 novembre 2025 et au document Gestion des résultats non négatifs v2 novembre 2025 ;
+- depuis une fiche éleveur, les liens sous la proposition du moteur ouvrent directement la page PDF correspondant au cas calculé (cas 1 à 7, douteux/recontrôle, surveillance/acquisition).
