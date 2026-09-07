@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.21 — PWA multi-support */
-const APP_VERSION='1.2.21';
+/* Paratuberculose GDS 32-65 v1.2.22 — PWA multi-support */
+const APP_VERSION='1.2.22';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -262,6 +262,9 @@ function managementProposalAuto(ede,analysis=null){
   return inf;
 }
 
+function isAssainissement(hOrMode){const mode=typeof hOrMode==='string'?hOrMode:(hOrMode?.mode||'');return norm(mode).includes('assain');}
+function defaultAssainissementScreening(){return 'Tous bovins ≥ 24 mois - sérologie individuelle';}
+
 function isIntermediateCampaign(c,h=herdByEde(c?.ede)){
   if(!c)return false;if(c.intermediateYear)return true;
   if(num(c.tested)||num(c.positive)||num(c.doubtful))return false;
@@ -269,6 +272,7 @@ function isIntermediateCampaign(c,h=herdByEde(c?.ede)){
   return norm(h?.mode||c.mode).includes('garantie')&&protocolCode(c.protocol||h?.protocol||'1 bis')==='1bis'&&(text.includes('intermediaire')||text.includes('maintien')||text.includes('favorable'));
 }
 function campaignScreeningLabel(c,h=herdByEde(c?.ede)){
+  if(isAssainissement(h||c))return defaultAssainissementScreening();
   if(isIntermediateCampaign(c,h))return 'Année intermédiaire - aucun dépistage';
   return c?.screeningPlanned||c?.populationPlanned||c?.method||'';
 }
@@ -277,6 +281,7 @@ function nextScreeningFromHistory(ede){
   if(h.nextScreeningOverride)return h.nextScreeningOverride;
   if(c.nextScreeningOverride)return c.nextScreeningOverride;
   if(c.prophyNext)return c.prophyNext;
+  if(isAssainissement(h||c))return defaultAssainissementScreening();
   if(isIntermediateCampaign(c,h))return 'Bovins 24-72 mois - sérologie individuelle';
   return screeningFor1Bis(protocolYearValue(c,h)?protocolYearValue(c,h)+1:1);
 }
@@ -290,7 +295,7 @@ function managementProposal(ede,analysis=null){
   }
   const p=managementProposalAuto(ede,a);
   const manual=h.nextScreeningOverride||c.nextScreeningOverride||c.prophyNext;
-  if(manual)p.nextScreening=manual;else if(!analysisAggregate().get(String(ede))&&isIntermediateCampaign(c,h))p.nextScreening='Bovins 24-72 mois - sérologie individuelle';
+  if(manual)p.nextScreening=manual;else if(isAssainissement(h||c))p.nextScreening=defaultAssainissementScreening();else if(!analysisAggregate().get(String(ede))&&isIntermediateCampaign(c,h))p.nextScreening='Bovins 24-72 mois - sérologie individuelle';
   return p;
 }
 function historyEventHTML(c){
@@ -368,8 +373,8 @@ function nextProgrammingInfo(h){
   const explicit=h.nextScreeningOverride||c.nextScreeningOverride||c.prophyNext||'';
   const a=effectiveAnalysisForHerd(h.ede);
   const proposal=managementProposal(h.ede,a);
-  let text=String(explicit||proposal.nextScreening||'').trim();
-  let source=explicit?'Programmation enregistrée':'Proposition automatique';
+  let text=String(explicit||(isAssainissement(h)?defaultAssainissementScreening():proposal.nextScreening)||'').trim();
+  let source=explicit?'Programmation enregistrée':(isAssainissement(h)?'Règle Assainissement':'Proposition automatique');
   const n=norm(text);
   let category='À vérifier';
   if(n.includes('24-72')||n.includes('24 a 72')||n.includes('24 à 72'))category='24-72 mois';

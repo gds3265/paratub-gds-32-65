@@ -173,3 +173,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Pour une campagne clôturée en `Favorable A`, les anciens compteurs bruts ne créent plus artificiellement de positifs dans l'affichage effectif.
 - La colonne de qualification proposée reprend le statut final enregistré pour les campagnes historiques.
 - Le KPI « Positifs à traiter » ne compte plus les campagnes historiques déjà clôturées.
+
+
+## v1.2.22 — règle Assainissement
+- Par défaut, tous les cheptels en Assainissement sont programmés chaque année sur tous les bovins ≥24 mois en sérologie individuelle.
+- La règle est appliquée dans la campagne, la proposition N+1 et l'onglet Programmation N+1.
+- Une programmation manuelle explicite reste prioritaire pour N+1.
