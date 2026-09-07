@@ -158,3 +158,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - ajoute un onglet Référentiels accessible en permanence ;
 - intègre des accès directs au Référentiel statut favorable v3 novembre 2025 et au document Gestion des résultats non négatifs v2 novembre 2025 ;
 - depuis une fiche éleveur, les liens sous la proposition du moteur ouvrent directement la page PDF correspondant au cas calculé (cas 1 à 7, douteux/recontrôle, surveillance/acquisition).
+
+
+## v1.2.20 — correction campagne clôturée
+- Les résultats repris uniquement depuis l'historique sont considérés comme déjà clôturés et ne rouvrent plus la file À traiter.
+- Le compteur À traiter ne compte plus les positifs historiques.
+- Le compteur devient Traités / clôturés pour distinguer les validations actives et l'historique déjà enregistré.
+- Restaurer l'historique initial ne supprime plus ANALYSES_LOTS ni TRAITEMENTS.
+- Les résultats historiques restent visibles dans Campagne et dans les fiches éleveurs, sans être transformés en nouveaux dossiers à instruire.
