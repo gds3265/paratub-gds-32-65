@@ -160,9 +160,16 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - depuis une fiche éleveur, les liens sous la proposition du moteur ouvrent directement la page PDF correspondant au cas calculé (cas 1 à 7, douteux/recontrôle, surveillance/acquisition).
 
 
-## v1.2.20 — correction campagne clôturée
+## v1.2.21 — correction campagne clôturée
 - Les résultats repris uniquement depuis l'historique sont considérés comme déjà clôturés et ne rouvrent plus la file À traiter.
 - Le compteur À traiter ne compte plus les positifs historiques.
 - Le compteur devient Traités / clôturés pour distinguer les validations actives et l'historique déjà enregistré.
 - Restaurer l'historique initial ne supprime plus ANALYSES_LOTS ni TRAITEMENTS.
 - Les résultats historiques restent visibles dans Campagne et dans les fiches éleveurs, sans être transformés en nouveaux dossiers à instruire.
+
+## v1.2.21 — fiches éleveurs et campagnes historiques
+- Restaure la fonction `nonNegFollowupLabel` manquante qui bloquait l'ouverture des fiches éleveurs.
+- Une campagne reprise de l'historique n'est plus réinterprétée comme « bovin infecté / statut suspendu » : le statut final enregistré de la campagne est affiché.
+- Pour une campagne clôturée en `Favorable A`, les anciens compteurs bruts ne créent plus artificiellement de positifs dans l'affichage effectif.
+- La colonne de qualification proposée reprend le statut final enregistré pour les campagnes historiques.
+- Le KPI « Positifs à traiter » ne compte plus les campagnes historiques déjà clôturées.
