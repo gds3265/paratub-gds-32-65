@@ -1,4 +1,4 @@
-const CACHE='ptb-gds-v1.2.22';
+const CACHE='ptb-gds-v1.2.23';
 const BASE='/paratub-gds-32-65/';
 const CORE=[
   BASE,

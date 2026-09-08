@@ -179,3 +179,8 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Par défaut, tous les cheptels en Assainissement sont programmés chaque année sur tous les bovins ≥24 mois en sérologie individuelle.
 - La règle est appliquée dans la campagne, la proposition N+1 et l'onglet Programmation N+1.
 - Une programmation manuelle explicite reste prioritaire pour N+1.
+
+## v1.2.23 — export et impression de la programmation filtrée
+- L'export CSV de « Programmation N+1 » reprend désormais uniquement la sélection visible selon les filtres Département, Mode, Catégorie et Recherche.
+- Ajout du bouton « Imprimer la sélection » : génère une liste imprimable A4 paysage contenant uniquement les cheptels correspondant aux filtres actifs.
+- Le titre d'impression rappelle la campagne préparée et les filtres appliqués.
