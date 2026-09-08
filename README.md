@@ -194,9 +194,18 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Les cartes d’historique affichent désormais aussi le nombre de négatifs.
 
 
-## v1.2.26
+## v1.2.27
 - Saisie d’un résultat **hors prophylaxie** dans les non négatifs.
 - La sérologie peut être laissée vide si une PCR est renseignée.
 - Une PCR fèces positive hors prophylaxie suspend le statut du cheptel même pendant une année intermédiaire.
 - Le cas apparaît dans la file À traiter, dans la campagne et dans la fiche éleveur.
 - Le contexte du résultat est visible dans le tableau des non négatifs.
+
+
+## v1.2.27 — qualification SIGAL de référence
+- La qualification SIGAL affichée utilise en priorité le champ « qualif SIGAL suite réa prophy et MAJ dossier » issu des fichiers engagés 32/65.
+- Une campagne plus récente réellement clôturée prend le dessus sur cette valeur historique.
+- Une décision plus récente dans l’application (ex. PCR positive hors prophylaxie) prend également le dessus.
+- La qualification AGDS reste affichée séparément sans être remplacée par la qualification SIGAL.
+- La fiche éleveur affiche la source de la qualification SIGAL actuelle.
+- Le champ « qualif SIGAL suite réa prophy et MAJ dossier » est modifiable et repris dans les sauvegardes/imports Excel complets.
