@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.24 — PWA multi-support */
-const APP_VERSION='1.2.23';
+/* Paratuberculose GDS 32-65 v1.2.25 — PWA multi-support */
+const APP_VERSION='1.2.25';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -13,6 +13,29 @@ const num=v=>Number(String(v??'').replace(',','.'))||0;
 const key=(...p)=>p.map(x=>String(x??'')).join('|');
 function campaignFromDate(v){const d=v instanceof Date?v:new Date(v); if(isNaN(d))return''; const y=d.getFullYear(); return d.getMonth()>=6?`${y}/${y+1}`:`${y-1}/${y}`}
 function currentCampaignDefault(){return '2025/2026'}
+function isLegacyHistoryCountSwap(c){
+  const tested=num(c?.tested),negative=num(c?.negative),doubtful=num(c?.doubtful),positive=num(c?.positive);
+  const source=String(c?.comment||c?.raw?.['Commentaires / source']||'');
+  return tested>0&&negative===0&&positive>0&&(positive+doubtful===tested)&&(/\.xlsx\b/i.test(source)||num(c?.sourceRows)>0);
+}
+function repairLegacyHistoryRecord(c){
+  if(!isLegacyHistoryCountSwap(c))return c;
+  const oldNegativeColumn=num(c.positive),oldNonNegative=num(c.doubtful);
+  const fixed={...c,negative:oldNegativeColumn,positive:oldNonNegative,doubtful:0,legacyAnalysisCountRepair:'1.2.25'};
+  if(Array.isArray(c.sampleDetails)) fixed.sampleDetails=c.sampleDetails.map(x=>{
+    const t=num(x?.tested),p=num(x?.positive),d=num(x?.doubtful),n=num(x?.negative);
+    return t>0&&n===0&&p>0&&p+d===t?{...x,negative:p,positive:d,doubtful:0}:x;
+  });
+  return fixed;
+}
+async function repairLegacyHistoryCounts(){
+  if(state.meta.historyAnalysisCountRepair==='1.2.25')return 0;
+  let changed=0;
+  const corrected=state.campaigns.map(c=>{const f=repairLegacyHistoryRecord(c);if(f!==c)changed++;return f});
+  if(changed){await db.bulkPut('campaigns',corrected.filter(c=>c.legacyAnalysisCountRepair==='1.2.25'));state.campaigns=corrected;}
+  await setMeta('historyAnalysisCountRepair','1.2.25');
+  return changed;
+}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3200)}
 function download(name,content,type='text/plain;charset=utf-8'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
 function csvEscape(v){const s=String(v??''); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
@@ -300,8 +323,9 @@ function managementProposal(ede,analysis=null){
 }
 function historyEventHTML(c){
   const h=herdByEde(c.ede),inter=isIntermediateCampaign(c,h),screen=inter?'Année intermédiaire - aucun dépistage':campaignScreeningLabel(c,h);
-  const histPos=campaignIsFinalFavorable(c)?0:num(c.positive),histDoubt=campaignIsFinalFavorable(c)?0:num(c.doubtful);
-  const counts=inter?'Aucun prélèvement prévu':(num(c.tested)?`${num(c.tested)} dépistés · ${histPos} positifs${histDoubt?` · ${histDoubt} douteux`:''}`:'');
+  const histNeg=num(c.negative),histPos=campaignIsFinalFavorable(c)?0:num(c.positive),histDoubt=campaignIsFinalFavorable(c)?0:num(c.doubtful);
+  const detail=[histNeg?`${histNeg} négatifs`:'',histPos?`${histPos} positifs`:'',histDoubt?`${histDoubt} douteux`:''].filter(Boolean).join(' · ');
+  const counts=inter?'Aucun prélèvement prévu':(num(c.tested)?`${num(c.tested)} dépistés${detail?` · ${detail}`:''}`:'');
   const lots=Array.isArray(c.sampleDetails)&&c.sampleDetails.length>1?`<small>${c.sampleDetails.map(x=>`${fmtDate(x.date)} : ${num(x.tested)}`).join(' + ')} = <b>${num(c.tested)}</b></small>`:'';
   return `<div class="event"><div class="event-title"><strong>${esc(c.campaign)}</strong><button class="mini-btn edit-campaign" data-campaign-id="${esc(c.id)}">Modifier</button></div><small>${esc(c.status||c.situation||(inter?'Année intermédiaire':''))}</small><p>${esc(screen)}</p><small>${esc(counts)}</small>${lots}</div>`;
 }
@@ -623,7 +647,7 @@ function pick(o,...keys){for(const k of keys){const found=Object.keys(o).find(x=
 function parseFrenchDate(v){if(!v)return'';if(v instanceof Date)return v.toISOString();const m=String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?new Date(+m[3],+m[2]-1,+m[1]).toISOString():v}
 async function importExcel(file){if(!window.XLSX)throw new Error('Bibliothèque Excel indisponible : connexion internet nécessaire au premier import.');const data=await readFile(file),w=XLSX.read(data,{type:'array',cellDates:true});
   const herds=sheetObjects(w,'CHEPTELS').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE','N° cheptel / EDE'));return{id:ede||`herd${i}`,ede,dept:Number(pick(r,'Dépt','Département'))||Number(ede.slice(0,2)),name:pick(r,'Nom','Éleveur'),commune:pick(r,'Commune'),mode:pick(r,'Mode suivi','Mode de suivi'),protocol:pick(r,'Protocole'),vet:pick(r,'Vétérinaire'),currentQualification:pick(r,'Qualif AGDS actuelle','Qualification actuelle','Qualif après campagne','Situation garantie','Qualification AGDS'),qualificationAgds:pick(r,'Qualif AGDS actuelle','Qualification AGDS'),qualificationNational:pick(r,'Qualif logiciel national actuelle','Qualification logiciel national'),raw:r}}).filter(x=>x.ede);
-  const campaigns=sheetObjects(w,'CAMPAGNES').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE'));const camp=pick(r,'Campagne');return{id:key(camp,ede,i),campaign:camp,ede,dept:Number(pick(r,'Dépt')),name:pick(r,'Nom'),mode:pick(r,'Mode suivi'),situation:pick(r,'Situation garantie'),protocol:pick(r,'Protocole'),protocolYear:pick(r,'Année protocole / ancienneté'),screeningPlanned:pick(r,'Dépistage prévu'),method:pick(r,'Méthode'),tested:num(pick(r,'Nb dépistés')),negative:num(pick(r,'Nb négatifs')),positive:num(pick(r,'Nb positifs')),status:pick(r,'Qualif / statut campagne'),campaignDate:parseFrenchDate(pick(r,'Date campagne')),comment:pick(r,'Commentaires / source'),raw:r}}).filter(x=>x.ede&&x.campaign);
+  const campaigns=sheetObjects(w,'CAMPAGNES').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE'));const camp=pick(r,'Campagne');return repairLegacyHistoryRecord({id:key(camp,ede,i),campaign:camp,ede,dept:Number(pick(r,'Dépt')),name:pick(r,'Nom'),mode:pick(r,'Mode suivi'),situation:pick(r,'Situation garantie'),protocol:pick(r,'Protocole'),protocolYear:pick(r,'Année protocole / ancienneté'),screeningPlanned:pick(r,'Dépistage prévu'),method:pick(r,'Méthode'),tested:num(pick(r,'Nb dépistés')),negative:num(pick(r,'Nb négatifs')),doubtful:num(pick(r,'Nb douteux')),positive:num(pick(r,'Nb positifs')),status:pick(r,'Qualif / statut campagne'),campaignDate:parseFrenchDate(pick(r,'Date campagne')),comment:pick(r,'Commentaires / source'),raw:r})}).filter(x=>x.ede&&x.campaign);
   const nns=sheetObjects(w,'NON_NEGATIFS').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE')),animalId=digits(pick(r,'N° bovin','Animal','Identifiant bovin'));const camp=pick(r,'Campagne');return{id:key(camp,ede,animalId,i),campaign:camp,dept:Number(pick(r,'Dépt')),ede,animalId,result:pick(r,'Résultat initial','Résultat'),date:parseFrenchDate(pick(r,'Date notification / recontrôle','Date','Date résultat')),presence:pick(r,'Présence actuelle','Présent / sorti','Présence'),exitDate:parseFrenchDate(pick(r,'Date sortie')),exitCause:pick(r,'Cause sortie'),motherKnownNonNegative:pick(r,'Mère connue non négative ?','Mère connue positive ?'),motherKnownPositive:pick(r,'Mère connue positive ?'),comment:pick(r,'Commentaires','Commentaire'),raw:r}}).filter(x=>x.ede&&x.animalId);
   const desc=sheetObjects(w,'DESCENDANTS').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE')),animalId=digits(pick(r,'N° descendant','N° bovin','Animal'));return{id:key(ede,animalId,i),dept:Number(pick(r,'Dépt')),ede,motherId:digits(pick(r,'N° mère positive','N° mère')),animalId,birthDate:parseFrenchDate(pick(r,'Date naissance')),presence:pick(r,'Présence actuelle','Présent / sorti','Présence'),exitDate:parseFrenchDate(pick(r,'Date sortie')),exitCause:pick(r,'Cause sortie'),comment:pick(r,'Commentaires','Commentaire'),raw:r}}).filter(x=>x.ede&&x.animalId);
   const intro=sheetObjects(w,'INTRODUCTIONS').map((r,i)=>{const ede=digits(pick(r,'N° cheptel','N° EDE')),animalId=digits(pick(r,'N° bovin','Animal'));return{id:key(ede,animalId,i),dept:Number(pick(r,'Dépt')),ede,animalId,entryDate:parseFrenchDate(pick(r,'Date introduction','Date entrée')),origin:pick(r,'Provenance','Cheptel provenance'),control:pick(r,'Contrôle','Analyse','PCR intro','Sérologie intro'),result:pick(r,'Résultat','PCR intro','Sérologie intro'),comment:pick(r,'Commentaires','Commentaire'),raw:r}}).filter(x=>x.ede||x.animalId);
@@ -686,5 +710,5 @@ async function installApp(){
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.meta.bundledHistoryLoaded!=='1.2.4'||state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});

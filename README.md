@@ -184,3 +184,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - L'export CSV de « Programmation N+1 » reprend désormais uniquement la sélection visible selon les filtres Département, Mode, Catégorie et Recherche.
 - Ajout du bouton « Imprimer la sélection » : génère une liste imprimable A4 paysage contenant uniquement les cheptels correspondant aux filtres actifs.
 - Le titre d'impression rappelle la campagne préparée et les filtres appliqués.
+
+
+## v1.2.25 — correction des reprises historiques d’analyses
+- Correction automatique des anciennes lignes où les colonnes négatifs / non négatifs avaient été inversées lors de la reprise historique.
+- Règle sûre appliquée uniquement aux lignes historiques sources (.xlsx) où `négatifs=0` et `positifs + douteux = dépistés`.
+- Les valeurs sont remappées en `négatifs = ancienne colonne positifs` et `positifs = ancien compteur non négatifs`; les faux volumes massifs de positifs disparaissent.
+- Correction automatique des données déjà présentes en IndexedDB lors du premier démarrage de la v1.2.25.
+- Les cartes d’historique affichent désormais aussi le nombre de négatifs.
