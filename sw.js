@@ -1,4 +1,4 @@
-const CACHE='ptb-gds-v1.2.23';
+const CACHE='ptb-gds-v1.2.24';
 const BASE='/paratub-gds-32-65/';
 const CORE=[
   BASE,
@@ -13,7 +13,9 @@ const CORE=[
   BASE+'history_seed.js',
   BASE+'migration/history_seed.json',
   BASE+'referentiel/Referentiel_statut_favorable_v3_nov2025.pdf',
-  BASE+'referentiel/Gestion_resultats_non_negatifs_v2_nov2025.pdf'
+  BASE+'referentiel/Gestion_resultats_non_negatifs_v2_nov2025.pdf',
+  'referentiel_statut_favorable.pdf',
+  'gestion_non_negatifs.pdf'
 ];
 
 self.addEventListener('install',event=>{
