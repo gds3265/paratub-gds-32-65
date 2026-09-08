@@ -21,3 +21,10 @@
 .reimbursement-box h3{margin-top:0}.cloud-user{margin:14px 0;padding:10px 12px;background:#f7f3f6;border-radius:10px}.auth-box{margin-top:14px}.user-admin{margin-top:18px}.cause-chart-row{grid-template-columns:repeat(auto-fit,minmax(360px,1fr))}
 
 .install-btn{white-space:nowrap}.install-btn:disabled{opacity:.65;cursor:default}
+
+/* v1.2.28 - référentiels de saisie */
+.ref-manager{margin-top:20px;padding-top:14px;border-top:1px solid #e3e7ea}
+.ref-manager:first-of-type{margin-top:8px}
+.ref-manager table input{width:100%;min-width:120px}
+.history-readonly{padding:10px 12px;margin-top:8px;background:#f7f8f9;border-radius:8px}
+details summary{cursor:pointer}

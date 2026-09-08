@@ -209,3 +209,13 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - La qualification AGDS reste affichée séparément sans être remplacée par la qualification SIGAL.
 - La fiche éleveur affiche la source de la qualification SIGAL actuelle.
 - Le champ « qualif SIGAL suite réa prophy et MAJ dossier » est modifiable et repris dans les sauvegardes/imports Excel complets.
+
+
+## v1.2.28 — qualifications configurables et base vétérinaires
+- Qualification SIGAL actuelle : une campagne simplement favorable ne remplace plus automatiquement une qualification SIGAL explicite telle que SUSP.
+- La fiche éleveur ne demande plus de maintenir quatre champs de qualification : AGDS + éventuel override SIGAL actuel ; les anciennes valeurs SIGAL restent consultables comme historique.
+- Paramètres : catalogues AGDS et SIGAL modifiables (code + libellé complet), avec ajout et suppression.
+- Libellés AGDS complets préchargés d'après la nomenclature fournie (00, 01, 0I, 0N, AI, D1 à D5, DS, EC, FA, FB, PA, PO/P0, S1).
+- Paramètres : base des vétérinaires, ajout / renommage / suppression de la liste ; renommage met à jour les fiches utilisant ce libellé.
+- Fiche éleveur : autocomplétion vétérinaire depuis la base pour éviter les variantes de saisie.
+- Les catalogues et vétérinaires sont conservés dans les paramètres, sauvegardes JSON et synchronisation Supabase.
