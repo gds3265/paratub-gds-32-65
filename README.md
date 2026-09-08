@@ -192,3 +192,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Les valeurs sont remappées en `négatifs = ancienne colonne positifs` et `positifs = ancien compteur non négatifs`; les faux volumes massifs de positifs disparaissent.
 - Correction automatique des données déjà présentes en IndexedDB lors du premier démarrage de la v1.2.25.
 - Les cartes d’historique affichent désormais aussi le nombre de négatifs.
+
+
+## v1.2.26
+- Saisie d’un résultat **hors prophylaxie** dans les non négatifs.
+- La sérologie peut être laissée vide si une PCR est renseignée.
+- Une PCR fèces positive hors prophylaxie suspend le statut du cheptel même pendant une année intermédiaire.
+- Le cas apparaît dans la file À traiter, dans la campagne et dans la fiche éleveur.
+- Le contexte du résultat est visible dans le tableau des non négatifs.
