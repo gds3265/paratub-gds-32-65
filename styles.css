@@ -24,3 +24,8 @@
 
 /* v1.2.33 - couleurs campagne basées sur le mode, pas sur l'état de réception */
 .campaign-row.mode-garantie td{background:#f1f8ef}.campaign-row.mode-ass td{background:#fff6ea}.campaign-row.has-alert td:first-child{box-shadow:inset 4px 0 0 #c62828}.campaign-row:hover td{filter:brightness(.985)}
+
+/* v1.2.36 : la situation N doit accrocher immédiatement le regard */
+.current-situation-card{background:#fff4f9!important;border:2px solid #b72b78!important;box-shadow:0 6px 18px rgba(151,34,98,.12)!important;position:relative}
+.current-situation-card h3{color:#8f1f61;margin-bottom:12px}
+.current-situation-card:before{content:'SITUATION ACTUELLE';display:inline-block;font-size:10px;font-weight:850;letter-spacing:.06em;color:#8f1f61;background:#f6dbe9;border-radius:999px;padding:4px 8px;margin-bottom:8px}

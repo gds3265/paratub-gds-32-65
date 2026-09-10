@@ -1,3 +1,14 @@
+## v1.2.36 - SIGAL corrigé et situation N mise en évidence
+
+- Le bloc N (situation actuelle) est visuellement prioritaire : fond rose très clair, bordure renforcée et repère « SITUATION ACTUELLE ».
+- Référentiels AGDS et SIGAL désormais réellement séparés.
+- AGDS standard conservé : PA, DS, 0N, 0I, 1, PO, S1 avec libellés complets.
+- SIGAL généraliste : acquisition, dépistage systématique, année 1, année >1, intermédiaire, plan de maîtrise, suspendu.
+- Équivalences par défaut : PA→acquisition ; DS→ds ; 1→année1 ; 0N→année >1 ; 0I→inter ; PO→plan maitrise ; S1→susp.
+- Favorable A/B restent des statuts/historique, pas de fausses qualifications AGDS ou SIGAL.
+- Les variantes historiques (SUSP, PO, DS, acqui, >1...) sont normalisées à l'affichage.
+- La mise à jour de version ne recharge plus automatiquement toute la base historique si elle est déjà complète, afin de préserver les modifications locales.
+
 ## v1.2.35 - remise à niveau depuis les fiches Excel éleveur
 - Réintègre la base consolidée issue des fiches Excel éleveur avec les évolutions N-1 / N / N+1.
 - Tous les descendants présents dans les fiches Excel sont marqués EXCME AGDS vu/saisi ; tous les imports Garantie sont marqués EXCIN AGDS vu/saisi.
