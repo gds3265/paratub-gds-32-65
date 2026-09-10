@@ -1,3 +1,9 @@
+## v1.2.35 - remise à niveau depuis les fiches Excel éleveur
+- Réintègre la base consolidée issue des fiches Excel éleveur avec les évolutions N-1 / N / N+1.
+- Tous les descendants présents dans les fiches Excel sont marqués EXCME AGDS vu/saisi ; tous les imports Garantie sont marqués EXCIN AGDS vu/saisi.
+- Une clôture n’est confirmée que lorsqu’une information de clôture est réellement disponible ; sinon le dossier reste à vérifier/clôturer.
+- Les exports AGDS du 10/09/2026 sont utilisés comme preuve positive complémentaire, sans considérer leur absence comme une absence d’événement.
+
 # Paratuberculose GDS 32-65 - v1.2.7
 
 Application PWA de suivi de la paratuberculose bovine.
