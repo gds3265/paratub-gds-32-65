@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.36 — PWA multi-support */
-const APP_VERSION='1.2.36';
+/* Paratuberculose GDS 32-65 v1.2.37 — PWA multi-support */
+const APP_VERSION='1.2.37';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -773,6 +773,49 @@ function openAnimalsModal(ede){const rows=activeAnimals(ede);openModal(`<h2>Anim
 function exportFullExcel(){if(!window.XLSX)return toast('Bibliothèque Excel indisponible. Ouvrir l’application avec internet puis réessayer.');const wb=XLSX.utils.book_new(),add=(name,rows)=>{const cleaned=(rows||[]).map(r=>{const o={};for(const [k,v] of Object.entries(r||{})){if(k==='raw')continue;o[k]=v instanceof Date?v.toISOString():v}return o});const ws=XLSX.utils.json_to_sheet(cleaned.length?cleaned:[{Info:'Aucune donnée'}]);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31))};add('CHEPTELS',state.herds);add('CAMPAGNES',state.campaigns);add('NON_NEGATIFS',state.nonnegatives);add('DESCENDANTS',state.descendants);add('INTRODUCTIONS',state.introductions);add('ANIMAUX',state.animals);add('ANALYSES_LOTS',state.analysisLots);add('TRAITEMENTS',state.analysisTreatments);add('PARAMETRES',[{Campagne_active:state.campaign,Version:APP_VERSION,Date_export:new Date().toISOString()}]);XLSX.writeFile(wb,`Sauvegarde_Paratuberculose_GDS_32_65_${today()}.xlsx`);toast('Sauvegarde Excel créée')}
 
 
+
+async function applyEnd2526QualificationFix(){
+  if(state.meta.end2526QualificationFix==='1.2.37')return;
+  const seed=window.PTB_BUNDLED_HISTORY||null;
+  if(!seed||!Array.isArray(seed.herds))return;
+  const byEde=new Map(seed.herds.map(h=>[String(h.ede),h]));
+  const updates=[];
+  for(const h of state.herds){
+    const src=byEde.get(String(h.ede)); if(!src)continue;
+    const oldAgds=String(h.qualificationAgds||h.currentQualification||'').trim();
+    const oldSigal=canonicalSigal(h.qualificationSigalCurrent||h.qualificationNational||'');
+    const expectedPrevAgds=String(src.previousAgds||'').trim();
+    const expectedPrevSigal=canonicalSigal(src.previousSigal||'');
+    // Correction ciblée : on ne remplace automatiquement la situation N que si la fiche
+    // porte encore les valeurs de début de campagne 25/26 (ou une valeur vide).
+    const looksLikeOldStart=!oldAgds||norm(oldAgds)===norm(expectedPrevAgds)||!oldSigal||norm(oldSigal)===norm(expectedPrevSigal);
+    if(!looksLikeOldStart)continue;
+    const obj={...h,
+      previousCampaign:src.previousCampaign||h.previousCampaign||'2024/2025',
+      previousAgds:src.previousAgds||h.previousAgds||'',
+      previousSigal:src.previousSigal||h.previousSigal||'',
+      currentQualification:src.currentQualification||src.qualificationAgds||h.currentQualification||'',
+      qualificationAgds:src.qualificationAgds||src.currentQualification||h.qualificationAgds||'',
+      qualificationSigalCurrent:src.qualificationSigalCurrent||h.qualificationSigalCurrent||'',
+      qualificationNational:src.qualificationNational||h.qualificationNational||'',
+      qualificationAfterCampaign:src.qualificationAfterCampaign||h.qualificationAfterCampaign||'',
+      statusOverride:src.statusOverride||h.statusOverride||'',
+      currentStatusCampaign:'2025/2026',
+      qualificationUpdateSource:'Fin campagne 2025/2026 – fichier engagés (qualification après prophylaxie / MAJ dossier)'
+    };
+    // Conserve les événements manuels et remplace seulement l'ancien événement généré de situation actuelle.
+    const hist=Array.isArray(h.statusHistory)?h.statusHistory.map(x=>({...x})):[];
+    const kept=hist.filter(e=>!(String(e.campaign)==='2025/2026'&&String(e.reason||'').startsWith('Situation actuelle issue des fiches Excel')));
+    const seedCurrent=(Array.isArray(src.statusHistory)?src.statusHistory:[]).find(e=>String(e.campaign)==='2025/2026'&&String(e.reason||'').startsWith('Situation de fin de campagne 2025/2026'));
+    if(seedCurrent&&!kept.some(e=>String(e.campaign)==='2025/2026'&&norm(e.agds)===norm(seedCurrent.agds)&&norm(canonicalSigal(e.sigal))===norm(canonicalSigal(seedCurrent.sigal))&&norm(e.status)===norm(seedCurrent.status)))kept.push({...seedCurrent});
+    obj.statusHistory=kept;
+    updates.push(obj);
+  }
+  if(updates.length)await db.bulkPut('herds',updates);
+  await setMeta('end2526QualificationFix','1.2.37');
+  if(updates.length)await loadState();
+}
+
 async function restoreBundledHistory(opts={}){
   const silent=!!opts.silent, force=!!opts.force;
   try{
@@ -943,5 +986,5 @@ async function installApp(){
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});

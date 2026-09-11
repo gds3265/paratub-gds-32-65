@@ -1,3 +1,11 @@
+## v1.2.37 - correction du décalage début/fin de campagne 2025/2026
+
+- Correction des qualifications actuelles des départements 32 et 65 à partir des fichiers engagés.
+- N-1 conserve la qualification de début de campagne 2025/2026 (équivalente à la situation fin 2024/2025).
+- N reprend désormais la qualification SIGAL après prophylaxie / mise à jour dossier, donc la situation de fin de campagne 2025/2026.
+- La qualification AGDS courante est recalée sur l'équivalent de la qualification SIGAL de fin de campagne.
+- Migration ciblée lors du passage depuis v1.2.36 : elle ne corrige que les fiches qui portent encore les anciennes valeurs de début de campagne, afin de préserver les corrections manuelles.
+
 ## v1.2.36 - SIGAL corrigé et situation N mise en évidence
 
 - Le bloc N (situation actuelle) est visuellement prioritaire : fond rose très clair, bordure renforcée et repère « SITUATION ACTUELLE ».
