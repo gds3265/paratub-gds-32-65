@@ -247,3 +247,10 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Paramètres : catalogue AGDS → SIGAL modifiable, avec création/suppression de qualifications, libellés complets et statut associé.
 - Paramètres : répertoire des vétérinaires ; les fiches utilisent une liste commune pour éviter les variantes de libellé.
 - Lors du renommage d’un vétérinaire, option de remplacement du libellé dans toutes les fiches existantes.
+
+
+## v1.2.40
+- Import introductions/descendants = point d’entrée unique : création/mise à jour automatique du suivi Paratu, sans double saisie.
+- Rapprochement orienté actions AGDS : événement EXCIN/EXCME à créer, à créer puis clôturer, à clôturer, déjà traité, déjà clôturé mais ressort dans la liste.
+- Export Excel après import avec feuilles SYNTHESE, A_FAIRE_AGDS et RECAP_COMPLET.
+- Les animaux historiques issus des fiches Excel restent considérés comme déjà traités dans AGDS ; les nouveaux animaux importés restent à traiter tant qu’aucun événement n’est retrouvé.

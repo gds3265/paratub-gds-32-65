@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.39 — PWA multi-support */
-const APP_VERSION='1.2.39';
+/* Paratuberculose GDS 32-65 v1.2.40 — PWA multi-support */
+const APP_VERSION='1.2.40';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -897,9 +897,12 @@ async function importExcel(file){if(!window.XLSX)throw new Error('Bibliothèque 
 function parseDelimited(text){const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());if(!lines.length)return[];const sep=(lines[0].match(/;/g)||[]).length>(lines[0].match(/,/g)||[]).length?';':',';const parseLine=line=>{const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===sep&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out.map(v=>v.replace(/^="(.*)"$/,'$1').trim())};const headers=parseLine(lines[0]);return lines.slice(1).map(l=>{const a=parseLine(l),o={};headers.forEach((h,i)=>o[h]=a[i]??'');return o})}
 async function rowsFromAnyFile(file){if(/\.xlsx?$/i.test(file.name)){if(!window.XLSX)throw new Error('Bibliothèque Excel indisponible');const data=await readFile(file),w=XLSX.read(data,{type:'array',cellDates:true});return XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''})}return parseDelimited(await file.text())}
 async function importTrackingFile(file,kind){
+  if(!ensureWrite())return;
   const rows=await rowsFromAnyFile(file),isIntro=kind==='introductions',existing=state[kind];
-  const sum={total:rows.length,added:0,already:0,agds:0,closedAgds:0,verifyAgds:0,toClose:0,ignored:0,assainissement:0,unknownMode:0};
+  const code=isIntro?'EXCIN':'EXCME';
+  const sum={total:rows.length,added:0,already:0,treated:0,openTracked:0,pendingCreate:0,createAndClose:0,toClose:0,resurfacedClosed:0,ignored:0,assainissement:0,unknownMode:0};
   const report=[];
+
   for(const r of rows){
     const ede=digits(pick(r,'N° cheptel','N° EDE','N° exploitation','Exploitation','EDE')),
       animalId=digits(pick(r,'Identifiant bovin','N° bovin','Numéro bovin','Animal','N° descendant')),
@@ -908,62 +911,151 @@ async function importTrackingFile(file,kind){
       motherId=digits(pick(r,'N° mère','Numéro mère','N° mère positive')),
       exitDate=parseFrenchDate(pick(r,'Date sortie','Date de sortie')),
       result=pick(r,'Résultat','Résultat contrôle','Contrôle','Sérologie','Résultat sérologie'),
-      eventCode=isIntro?'EXCIN':'EXCME',
-      eventEde=digits(pickContains(r,'numéro exploitation','dernier évènement',eventCode)),
-      eventStart=parseFrenchDate(pickContains(r,'date début','dernier évènement',eventCode)),
-      eventEnd=parseFrenchDate(pickContains(r,'date fin','dernier évènement',eventCode)),
-      eventInfo=pickContains(r,'informations','dernier évènement',eventCode),
+      eventEde=digits(pickContains(r,'numéro exploitation','dernier évènement',code)),
+      eventStart=parseFrenchDate(pickContains(r,'date début','dernier évènement',code)),
+      eventEnd=parseFrenchDate(pickContains(r,'date fin','dernier évènement',code)),
+      eventInfo=pickContains(r,'informations','dernier évènement',code),
       hasAgdsEvent=!!(eventEde||eventStart||eventInfo),
       closedInAgds=!!(eventEnd||norm(eventInfo).includes('fin le'));
+
     if(!ede||!animalId||(isIntro&&!entryDate)){sum.ignored++;continue}
 
-    const herd=herdByEde(ede), herdMode=norm(herd?.mode||'');
-    // Les introductions ne sont suivies dans l'application que pour les cheptels en Garantie.
-    // Les lignes Assainissement sont signalées séparément pour traitement direct dans le logiciel métier,
-    // sans créer de dossier d'introduction dans l'application.
+    const herd=herdByEde(ede),herdMode=norm(herd?.mode||''),herdName=herd?.name||'';
+
     if(isIntro && herdMode.includes('assain')){
       sum.assainissement++;
-      report.push({animalId,ede,entryDate,motherId:'',status:'Assainissement — traitement direct sans suivi dans l’application',existing:false,eventStart,eventEnd,excluded:true});
+      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'À traiter directement AGDS',action:'Introduction en assainissement : traiter directement dans AGDS, sans suivi EXCIN dans Paratu'});
       continue;
     }
     if(isIntro && !herdMode.includes('garantie')){
       sum.unknownMode++;
-      report.push({animalId,ede,entryDate,motherId:'',status:'Mode de suivi non identifié — à vérifier',existing:false,eventStart,eventEnd,excluded:true});
+      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'Mode à vérifier',action:'Mode de suivi non identifié : vérifier avant traitement'});
       continue;
     }
 
     const old=isIntro
       ?existing.find(x=>String(x.ede)===String(ede)&&String(x.animalId)===String(animalId)&&String(x.entryDate||x.introductionDate||'').slice(0,10)===String(entryDate).slice(0,10))
       :existing.find(x=>String(x.ede)===String(ede)&&String(x.animalId)===String(animalId));
+
     const a=animalIndex().get(String(animalId))||{},effectiveExit=old?.exitDate||exitDate||a.exitDate||'',campaign=old?.campaign||campaignFromDate(entryDate||birthDate)||state.campaign;
     const base={
       ...(old||{}),ede,dept:Number(ede.slice(0,2)),campaign,animalId,
       birthDate:old?.birthDate||birthDate||a.birthDate||'',motherId:old?.motherId||motherId||a.motherId||'',
       exitDate:effectiveExit,presence:effectiveExit?'Sorti':'Présent',result:old?.result||result||'',
-      // Le fichier peut être non exhaustif : on confirme un événement retrouvé, mais son absence
-      // ne remet jamais à faux une saisie déjà connue dans l'application.
+      // Une fiche Excel historique signifie que l'événement EXCIN/EXCME a déjà été vu et saisi dans AGDS.
+      // Les nouveaux animaux issus des listes AGDS restent "à traiter" jusqu'à ce qu'un événement soit retrouvé.
       excinAgds:!!(old?.excinAgds||hasAgdsEvent),excinClosed:!!(old?.excinClosed||closedInAgds),
-      agdsEventCode:eventCode,agdsEventStart:old?.agdsEventStart||eventStart||'',agdsEventEnd:old?.agdsEventEnd||eventEnd||'',agdsEventInfo:old?.agdsEventInfo||eventInfo||'',
-      trackingImportDate:today()
+      agdsEventCode:code,agdsEventStart:old?.agdsEventStart||eventStart||'',agdsEventEnd:old?.agdsEventEnd||eventEnd||'',agdsEventInfo:old?.agdsEventInfo||eventInfo||'',
+      trackingImportDate:today(),trackingSourceFile:file.name||'',trackingLastSeen:today()
     };
     const obj=isIntro
       ?{...base,id:old?.id||key(campaign,ede,animalId,entryDate),entryDate}
       :{...base,id:old?.id||key(ede,animalId,Date.now(),sum.added)};
+
     await db.put(kind,obj);
     if(old)sum.already++;else sum.added++;
-    if(obj.excinAgds)sum.agds++; else sum.verifyAgds++;
-    if(obj.excinClosed)sum.closedAgds++;
-    if(trackingToClose(obj))sum.toClose++;
-    const code=isIntro?'EXCIN':'EXCME';
-    const status=obj.excinClosed?`${code} clôturée dans AGDS`:trackingToClose(obj)?`À clôturer dans AGDS`:obj.excinAgds?`${code} déjà retrouvée dans AGDS`:`${code} non retrouvée dans ce fichier — à vérifier dans AGDS`;
-    report.push({animalId,ede,entryDate:entryDate||'',motherId:obj.motherId||'',status,existing:!!old,eventStart,eventEnd,excluded:false});
+
+    const canClose=closureCandidate(obj);
+    let category='',action='';
+    if(obj.excinClosed){
+      sum.resurfacedClosed++;
+      category='Déjà clôturé — ressort dans la liste';
+      action=`${code} déjà clôturé dans le suivi : vérifier seulement pourquoi AGDS le ressort encore`;
+    }else if(!obj.excinAgds && canClose){
+      sum.createAndClose++;
+      category='À créer + clôturer AGDS';
+      action=`Créer ${code} dans AGDS puis le clôturer (sortie ou contrôle favorable déjà détecté)`;
+    }else if(!obj.excinAgds){
+      sum.pendingCreate++;
+      category='À traiter dans AGDS';
+      action=`Créer l'événement ${code} dans AGDS`;
+    }else if(canClose){
+      sum.toClose++;
+      category='À clôturer AGDS';
+      action=`Clôturer l'événement ${code} dans AGDS`;
+    }else{
+      sum.treated++;sum.openTracked++;
+      category='Déjà traité — suivi ouvert';
+      action=`${code} déjà saisi dans AGDS ; rien à ressaisir dans Paratu`;
+    }
+
+    report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:obj.motherId||'',birthDate:obj.birthDate||'',exitDate:effectiveExit||'',result:obj.result||'',eventStart,eventEnd,eventInfo,existing:!!old,excluded:false,agdsKnown:!!obj.excinAgds,closedAgds:!!obj.excinClosed,category,action});
   }
+
   await loadState();
-  const actionRows=report.filter(x=>x.excluded||x.status.includes('à vérifier')||x.status==='À clôturer dans AGDS');
-  const details=actionRows.slice(0,200).map(x=>`<tr><td><strong>${esc(x.animalId)}</strong></td><td>${esc(x.ede)}</td>${isIntro?`<td>${fmtDate(x.entryDate)}</td>`:`<td>${esc(x.motherId||'')}</td>`}<td>${x.existing?'Déjà dans l’application':x.excluded?'Non importé':'Nouveau'}</td><td>${esc(x.status)}</td></tr>`).join('');
-  const modeKpis=isIntro?`${kpi('Assainissement',sum.assainissement,'à traiter directement, sans suivi dans l’application')}${kpi('Mode à vérifier',sum.unknownMode,'non importés tant que le mode n’est pas identifié')}`:'';
-  openModal(`<h2>Rapprochement ${isIntro?'introductions':'descendants'}</h2><div class="grid kpi-grid">${kpi('Lignes lues',sum.total,'')}${kpi('Nouveaux suivis',sum.added,isIntro?'Garantie uniquement':'ajoutés aux fiches')}${kpi('Déjà dans l’application',sum.already,'sans doublonner')}${kpi(isIntro?'EXCIN détectée':'EXCME détectée',sum.agds,`${sum.closedAgds} déjà clôturée(s) dans AGDS`)}${kpi(isIntro?'EXCIN à vérifier':'EXCME à vérifier',sum.verifyAgds,'non retrouvée dans ce fichier non exhaustif')}${kpi('À clôturer AGDS',sum.toClose,'sortie ou contrôle favorable détecté')}${modeKpis}</div><p class="help">${isIntro?'Rapprochement strict = bovin + EDE + date d’introduction. Les introductions ne sont suivies dans l’application que pour les cheptels en Garantie. Les lignes Assainissement sont isolées et signalées pour traitement direct dans le logiciel métier, sans création de suivi d’introduction.':'Pour les descendants, le suivi métier est EXCME. L’application reconnaît automatiquement l’événement EXCME lorsqu’il est présent dans l’export.'}</p><p class="help"><b>Important :</b> le fichier importé peut être non exhaustif. L’absence d’un événement EXCIN/EXCME dans ce fichier ne prouve donc pas qu’il n’existe pas dans AGDS : l’application indique « à vérifier » au lieu de conclure « à saisir ».</p>${actionRows.length?`<h3>Points à vérifier / traiter</h3><div class="table-wrap"><table><thead><tr><th>Bovin</th><th>EDE</th><th>${isIntro?'Introduction':'Mère'}</th><th>Application</th><th>Action</th></tr></thead><tbody>${details}</tbody></table></div>${actionRows.length>200?`<p class="help">${actionRows.length-200} autre(s) ligne(s) non affichée(s) dans cet aperçu.</p>`:''}`:'<div class="success-box">Aucun point particulier détecté sur ce fichier.</div>'}${sum.ignored?`<p>${sum.ignored} ligne(s) ignorée(s) faute d’identifiants suffisants.</p>`:''}`)
+
+  const actionableCategories=new Set(['À traiter dans AGDS','À créer + clôturer AGDS','À clôturer AGDS','Déjà clôturé — ressort dans la liste','À traiter directement AGDS','Mode à vérifier']);
+  const actionRows=report.filter(x=>actionableCategories.has(x.category));
+  const details=actionRows.slice(0,250).map(x=>`<tr><td><strong>${esc(x.animalId)}</strong></td><td>${esc(x.ede)}</td><td>${esc(x.herdName||'')}</td>${isIntro?`<td>${fmtDate(x.entryDate)}</td>`:`<td>${esc(x.motherId||'')}</td>`}<td><span class="tracking-status ${x.category.includes('clôturer')?'warn':''}">${esc(x.category)}</span></td><td>${esc(x.action)}</td></tr>`).join('');
+
+  function reportRows(src){return src.map(x=>({
+    'Type':isIntro?'Introduction':'Descendant',
+    'EDE':x.ede,
+    'Éleveur':x.herdName||'',
+    'N° bovin':x.animalId,
+    ...(isIntro?{'Date introduction':fmtDate(x.entryDate)}:{'N° mère':x.motherId||''}),
+    'Date naissance':fmtDate(x.birthDate),
+    'Date sortie':fmtDate(x.exitDate),
+    'Résultat / contrôle':x.result||'',
+    [`${code} déjà saisi AGDS`]:x.agdsKnown?'Oui':'Non',
+    [`${code} clôturé`]:x.closedAgds?'Oui':'Non',
+    'État rapprochement':x.category,
+    'Action AGDS':x.action,
+    'Déjà dans Paratu':x.existing?'Oui':'Non',
+    'Début événement AGDS':fmtDate(x.eventStart),
+    'Fin événement AGDS':fmtDate(x.eventEnd),
+    'Info événement AGDS':x.eventInfo||''
+  }))}
+
+  function exportTrackingRecap(){
+    const all=reportRows(report),todo=reportRows(actionRows),summary=[
+      {Indicateur:'Lignes importées',Nombre:sum.total},
+      {Indicateur:'Nouveaux suivis créés automatiquement dans Paratu',Nombre:sum.added},
+      {Indicateur:'Déjà présents dans Paratu',Nombre:sum.already},
+      {Indicateur:`${code} à créer dans AGDS`,Nombre:sum.pendingCreate},
+      {Indicateur:`${code} à créer puis clôturer`,Nombre:sum.createAndClose},
+      {Indicateur:`${code} à clôturer dans AGDS`,Nombre:sum.toClose},
+      {Indicateur:'Déjà clôturés mais ressortent dans la liste AGDS',Nombre:sum.resurfacedClosed},
+      {Indicateur:'Déjà traités / suivi encore ouvert',Nombre:sum.openTracked},
+      ...(isIntro?[{Indicateur:'Assainissement - traitement direct AGDS sans suivi Paratu',Nombre:sum.assainissement},{Indicateur:'Mode à vérifier',Nombre:sum.unknownMode}]:[]),
+      {Indicateur:'Lignes ignorées',Nombre:sum.ignored}
+    ];
+    const base=`Rapprochement_${isIntro?'INTRO_EXCIN':'DESC_EXCME'}_${today()}`;
+    if(window.XLSX){
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary),'SYNTHESE');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(todo.length?todo:[{Info:'Aucune action à faire'}]),'A_FAIRE_AGDS');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(all.length?all:[{Info:'Aucune ligne'}]),'RECAP_COMPLET');
+      XLSX.writeFile(wb,base+'.xlsx');
+      toast('Récapitulatif Excel créé');
+    }else{
+      const headers=Object.keys((todo[0]||all[0]||{'Info':'Aucune ligne'}));
+      download(base+'.csv',toCSV(todo.length?todo:all,headers),'text/csv;charset=utf-8');
+      toast('Récapitulatif CSV créé');
+    }
+  }
+
+  const modeKpis=isIntro?`${kpi('Assainissement',sum.assainissement,'traitement direct AGDS, sans suivi dans Paratu')}${kpi('Mode à vérifier',sum.unknownMode,'non importés tant que le mode n’est pas identifié')}`:'';
+  openModal(`<h2>Rapprochement ${isIntro?'introductions':'descendants'}</h2>
+    <div class="notice"><b>Pas de double saisie :</b> l’import crée ou actualise automatiquement le suivi dans Paratu. Tu travailles ensuite uniquement la liste « À faire dans AGDS » ci-dessous.</div>
+    <div class="grid kpi-grid">
+      ${kpi('Lignes lues',sum.total,'')}
+      ${kpi('Nouveaux suivis',sum.added,'créés automatiquement dans Paratu')}
+      ${kpi(`${code} à créer`,sum.pendingCreate,'pas encore traité dans ton suivi')}
+      ${kpi('Créer + clôturer',sum.createAndClose,'déjà sorti ou contrôle favorable')}
+      ${kpi('À clôturer AGDS',sum.toClose,'événement déjà saisi, clôture à faire')}
+      ${kpi('Déjà clôturé mais ressort',sum.resurfacedClosed,'à vérifier seulement dans AGDS')}
+      ${kpi('Déjà traité / ouvert',sum.openTracked,'aucune ressaisie à faire')}
+      ${modeKpis}
+    </div>
+    <div class="actions" style="margin:14px 0"><button class="primary" id="btnExportTrackingRecap">Exporter le récap Excel</button></div>
+    <p class="help">${isIntro?'Rapprochement strict = bovin + EDE + date d’introduction. Les introductions ne sont suivies dans Paratu que pour les cheptels en Garantie.':'Pour les descendants, le suivi métier est EXCME. Les bovins déjà présents dans tes fiches historiques sont considérés comme déjà vus et saisis dans AGDS.'}</p>
+    <p class="help"><b>Lecture :</b> « À traiter dans AGDS » = événement ${code} à créer. « À clôturer AGDS » = événement déjà connu mais sortie ou contrôle favorable détecté. « Déjà clôturé mais ressort » = ton suivi le considère terminé alors qu’il réapparaît dans la liste AGDS.</p>
+    ${actionRows.length?`<h3>À faire / vérifier dans AGDS</h3><div class="table-wrap"><table><thead><tr><th>Bovin</th><th>EDE</th><th>Éleveur</th><th>${isIntro?'Introduction':'Mère'}</th><th>État</th><th>Action</th></tr></thead><tbody>${details}</tbody></table></div>${actionRows.length>250?`<p class="help">${actionRows.length-250} autre(s) ligne(s) sont incluses dans l’export Excel.</p>`:''}`:'<div class="success-box">Aucune action AGDS détectée sur ce fichier.</div>'}
+    ${sum.ignored?`<p>${sum.ignored} ligne(s) ignorée(s) faute d’identifiants suffisants.</p>`:''}`);
+  const btn=$('#btnExportTrackingRecap');if(btn)btn.onclick=exportTrackingRecap;
 }
+
 async function importAnimals(file,dept){const text=await file.text(),rows=parseDelimited(text);const arr=rows.map((r,i)=>{const animalId=digits(pick(r,'Identifiant bovin'));if(!animalId)return null;const exitDate=parseFrenchDate(pick(r,'Date sortie'));const code=pick(r,'Cause de sortie');const cm={E:'Élevage',B:'Boucherie',M:'Mort',H:'Héritage',C:'Autoconsommation'};return{id:key(dept,animalId),dept,animalId,motherId:digits(pick(r,'Numéro mère')),ede:digits(pick(r,'Exploitation')),birthDate:parseFrenchDate(pick(r,'Date naissance')),exitDate,presence:exitDate?'Sorti':'Présent',exitCause:cm[code]||code,workNo:pick(r,'Numéro travail'),name:pick(r,'Nom'),sex:pick(r,'Sexe'),raw:r}}).filter(Boolean);const old=state.animals.filter(a=>Number(a.dept)!==dept);await db.clear('animals');await db.bulkPut('animals',[...old,...arr])}
 async function importAnalysis(file,dept){const text=await file.text(),rows=parseDelimited(text);const arr=rows.map((r,i)=>{if(pick(r,'Code maladie')!=='PTB'||pick(r,"Base de l'analyse")!=='S'||pick(r,"Type d'analyse")!=='I'||pick(r,'Contexte')!=='P')return null;const ede=digits(pick(r,"N° d'exploitation")),sampleDate=parseFrenchDate(pick(r,'Date de prélèvement')),camp=campaignFromDate(sampleDate);if(!ede||!camp)return null;return{id:key(dept,ede,camp,pick(r,"N° incrément du lot d'analyse")||i,pick(r,'Numéro du dossier laboratoire')),dept,ede,campaign:camp,sampleDate,tested:num(pick(r,"Nombre d'analyse ou de prélèvements effectués")),positive:num(pick(r,"Nombre d'analyses positives")),animalsConcerned:num(pick(r,"Nombre d'animaux concernés par l'analyse")),lastUpdate:parseFrenchDate(pick(r,'Date de la dernière mise à jour')),labFile:pick(r,'Numéro du dossier laboratoire'),raw:r}}).filter(Boolean);const keep=state.analysisLots.filter(x=>Number(x.dept)!==dept||!arr.some(n=>n.campaign===x.campaign));await db.clear('analysisLots');await db.bulkPut('analysisLots',[...keep,...arr])}
 
