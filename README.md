@@ -1,3 +1,7 @@
+## v1.2.39 - filtre résultats non reçus + version PWA
+- Le filtre « Résultat non reçu » exclut désormais les années intermédiaires sans dépistage, les résultats historiques déjà enregistrés et les PCR positives hors prophylaxie.
+- L'affichage de version, le manifeste PWA, les icônes et le cache sont synchronisés sur v1.2.39.
+
 ## v1.2.37 - correction du décalage début/fin de campagne 2025/2026
 
 - Correction des qualifications actuelles des départements 32 et 65 à partir des fichiers engagés.
