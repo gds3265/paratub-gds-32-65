@@ -45,3 +45,12 @@
 .sortable-head.sort-asc::after{content:' ▲';opacity:1}
 .sortable-head.sort-desc::after{content:' ▼';opacity:1}
 .sortable-head:hover{background:rgba(169,43,120,.07)}
+
+/* v1.2.44 — lecture visuelle des sorties + contrôle descendance des mères sorties */
+.animal-exited-row td{background:#f1f2f3!important;color:#7b858b!important}
+.animal-exited-row td strong,.animal-exited-row td b{color:#687278!important}
+.animal-exited-row:hover td{background:#e9ebed!important}
+.mother-exited-cell{background:#e4e7e9!important;color:#6f787d!important;text-decoration:none}
+.mother-exited-cell small{color:#7b858b;font-weight:700}
+.mother-desc-alert{border-left:5px solid #e0a000;background:#fffdf6}
+.mother-desc-alert h2{color:#775900;margin-bottom:4px}
