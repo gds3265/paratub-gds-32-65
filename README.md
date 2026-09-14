@@ -262,3 +262,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Mise en évidence des animaux déjà sortis ou avec contrôle favorable afin de repérer les événements à clôturer dans AGDS.
 - Le compte-rendu des imports descendants / introductions indique désormais aussi **ce qui a été mis à jour dans Paratu** (nouveau suivi, événement confirmé, clôture, date de sortie).
 - Les introductions du contrôle AGDS restent limitées aux cheptels en Garantie.
+
+## v1.2.45
+- Remise à zéro unique des alertes historiques « Mères sorties — descendance à vérifier ».
+- Les situations déjà présentes lors de la mise à jour sont considérées vérifiées d’après les anciennes fiches éleveur.
+- Les nouvelles situations détectées après cette remise à zéro ressortent normalement.
+

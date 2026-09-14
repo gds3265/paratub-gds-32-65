@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.44 — PWA multi-support */
-const APP_VERSION='1.2.44';
+/* Paratuberculose GDS 32-65 v1.2.45 — PWA multi-support */
+const APP_VERSION='1.2.45';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -21,14 +21,15 @@ function trackingOpen(rec){return !rec?.excinClosed}
 function trackingToClose(rec){return !rec?.excinClosed&&closureCandidate(rec)}
 function trackingClosureEvidence(rec){const e=effectiveAnimalData(rec),parts=[];if(e.exitDate)parts.push(`Sortie ${fmtDate(e.exitDate)}`);const r=String(rec?.result||rec?.control||rec?.serology||rec?.serologyResult||rec?.repeatSerology||rec?.pcr||rec?.pcrResult||'').trim();if(r&&resultLooksFavorable(rec))parts.push(`Contrôle favorable : ${r}`);return parts.join(' · ')}
 function monthsAgoDate(months){const d=new Date();const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()-months);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return d}
+function motherDescendanceAlertKey(ede,motherId){return `${String(ede||'')}|${String(motherId||'')}`}
 function motherDescendanceAlerts(){
-  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9);
+  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=new Set(state.meta.motherDescendanceBaselineVerifiedV145?.keys||[]);
   for(const n of state.nonnegatives){
     const m=ai.get(String(n.animalId))||{},e=effectiveAnimalData(n),exitDate=e.exitDate;
     if(!exitDate)continue;
     const exit=new Date(exitDate);if(isNaN(exit)||exit<recentCutoff)continue;
     if(m.sex&&String(m.sex).toUpperCase()!=='F')continue;
-    const uniq=`${n.ede||''}|${n.animalId||''}`;if(seen.has(uniq))continue;seen.add(uniq);
+    const uniq=motherDescendanceAlertKey(n.ede,n.animalId);if(seen.has(uniq))continue;seen.add(uniq);if(baseline.has(uniq))continue;
     const desc=state.descendants.filter(d=>String(d.ede)===String(n.ede)&&String(effectiveAnimalData(d).motherId||d.motherId||'')===String(n.animalId||''));
     const recentCalf=desc.find(d=>{const bd=effectiveAnimalData(d).birthDate;if(!bd)return false;const b=new Date(bd);if(isNaN(b))return false;const nineBeforeExit=new Date(exit);nineBeforeExit.setMonth(nineBeforeExit.getMonth()-9);return (b>=nineBeforeExit&&b<=exit)||b>=youngCutoff;});
     if(recentCalf)continue;
@@ -138,6 +139,15 @@ async function markExistingTrackingHandledByDefault(){
     }
   }
   await setMeta('trackingBaselineHandledV142',{doneAt:new Date().toISOString(),descendants,introductions,note:'Tous les suivis existants considérés déjà traités dans AGDS ; clôtures conservées telles quelles.'});
+}
+
+async function baselineExistingMotherDescendanceAlerts(){
+  // Migration unique v1.2.45 : l'utilisateur indique que la vérification des descendances
+  // issue de ses anciennes fiches était à jour. Les alertes présentes au moment de la mise
+  // à jour sont donc acquittées une fois, sans empêcher les nouvelles alertes futures.
+  if(state.meta.motherDescendanceBaselineVerifiedV145)return;
+  const keys=motherDescendanceAlerts().map(r=>motherDescendanceAlertKey(r.ede,r.motherId));
+  await setMeta('motherDescendanceBaselineVerifiedV145',{doneAt:new Date().toISOString(),keys,note:'Alertes historiques de descendance des mères sorties considérées déjà vérifiées ; seules les nouvelles situations ressortiront ensuite.'});
 }
 
 function getCampaignsList(){const set=new Set(state.campaigns.map(x=>x.campaign).filter(Boolean));set.add(state.campaign); return [...set].sort((a,b)=>b.localeCompare(a))}
@@ -1196,5 +1206,5 @@ async function installApp(){
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
