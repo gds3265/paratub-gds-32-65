@@ -34,3 +34,14 @@
 .campaign-kpis{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px;margin:10px 0 14px}.campaign-kpi{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.03)}.campaign-kpi:hover{border-color:#c991b2;background:#fff8fc}.campaign-kpi strong{display:block;font-size:23px;line-height:1.1;color:#263238}.campaign-kpi span{font-size:11px;color:var(--muted);font-weight:700}.campaign-kpi.alert strong{color:#b42318}.campaign-action{display:inline-block;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:800;white-space:nowrap}.action-danger{background:#fde7e7;color:#9d1c1c}.action-warn{background:#fff1cf;color:#7d5700}.action-wait{background:#edf2f5;color:#52616a}.action-ok{background:#e9f5e6;color:#34652e}.quick-followup{display:grid;grid-template-columns:1.15fr 1.35fr 1fr;gap:12px;border-left:5px solid var(--pink);background:#fffafd;margin:12px 0}.quick-followup>div{padding:2px 8px}.quick-followup span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#8f1f61;font-weight:850;margin-bottom:4px}.quick-followup strong{display:block;font-size:14px}.quick-followup small{display:block;color:var(--muted);margin-top:3px}
 @media(max-width:1100px){.campaign-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:700px){.campaign-kpis{grid-template-columns:repeat(2,1fr)}.quick-followup{grid-template-columns:1fr}}
+
+/* v1.2.43 — tuiles cliquables et tris de tableaux */
+.herd-kpi{font:inherit;text-align:left;color:inherit;background:var(--card,#fff);border:1px solid var(--border,#dfe3e6);width:100%;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease}
+.herd-kpi:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.08);border-color:#a92b78}
+.herd-kpi:focus-visible{outline:3px solid rgba(169,43,120,.2);outline-offset:2px}
+.table-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px 0}
+.sortable-head{cursor:pointer;user-select:none;white-space:nowrap}
+.sortable-head::after{content:' ↕';opacity:.35;font-size:.9em}
+.sortable-head.sort-asc::after{content:' ▲';opacity:1}
+.sortable-head.sort-desc::after{content:' ▼';opacity:1}
+.sortable-head:hover{background:rgba(169,43,120,.07)}
