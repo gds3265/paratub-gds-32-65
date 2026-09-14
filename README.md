@@ -254,3 +254,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Rapprochement orienté actions AGDS : événement EXCIN/EXCME à créer, à créer puis clôturer, à clôturer, déjà traité, déjà clôturé mais ressort dans la liste.
 - Export Excel après import avec feuilles SYNTHESE, A_FAIRE_AGDS et RECAP_COMPLET.
 - Les animaux historiques issus des fiches Excel restent considérés comme déjà traités dans AGDS ; les nouveaux animaux importés restent à traiter tant qu’aucun événement n’est retrouvé.
+
+
+## v1.2.41
+- Ajout d'un écran **Contrôle AGDS** qui part des suivis EXCME/EXCIN encore ouverts dans Paratu.
+- Export Excel des suivis ouverts avec onglets SYNTHESE, A_CLOTURER_AGDS, A_VERIFIER_AGDS et TOUS_OUVERTS.
+- Mise en évidence des animaux déjà sortis ou avec contrôle favorable afin de repérer les événements à clôturer dans AGDS.
+- Le compte-rendu des imports descendants / introductions indique désormais aussi **ce qui a été mis à jour dans Paratu** (nouveau suivi, événement confirmé, clôture, date de sortie).
+- Les introductions du contrôle AGDS restent limitées aux cheptels en Garantie.
