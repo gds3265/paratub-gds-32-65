@@ -269,8 +269,14 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Les nouvelles situations détectées après cette remise à zéro ressortent normalement.
 
 
-## v1.2.46
+## v1.2.47
 - Mise en place d'un état initial T0 pour les alertes « À clôturer AGDS ».
-- Toutes les alertes de clôture déjà présentes lors du premier démarrage en v1.2.46 sont acquittées sans marquer artificiellement EXCME/EXCIN comme clôturés.
+- Toutes les alertes de clôture déjà présentes lors du premier démarrage en v1.2.47 sont acquittées sans marquer artificiellement EXCME/EXCIN comme clôturés.
 - Les compteurs Campagne, fiches éleveur et Contrôle AGDS n'affichent plus ce stock historique.
 - Une nouvelle sortie ou un nouveau contrôle favorable après le T0 peut faire réapparaître une alerte, grâce à une signature de l'état ayant été acquitté au T0.
+
+
+## v1.2.47
+- Correction : modifier uniquement une date de sortie sur un non négatif existant ne demande plus de renseigner une sérologie ou une PCR.
+- Saisie rapide des dates : JJMMAA accepté dans les formulaires de suivi (ex. 220526), affichage JJ/MM/AA.
+- Les dates restent stockées au format ISO en base pour conserver les tris et calculs.
