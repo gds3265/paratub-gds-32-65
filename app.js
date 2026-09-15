@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.45 — PWA multi-support */
-const APP_VERSION='1.2.45';
+/* Paratuberculose GDS 32-65 v1.2.46 — PWA multi-support */
+const APP_VERSION='1.2.46';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -18,7 +18,13 @@ function resultLooksFavorable(rec){const t=norm([rec?.result,rec?.control,rec?.s
 function closureCandidate(rec){return !!effectiveAnimalData(rec).exitDate||resultLooksFavorable(rec)}
 function nonNegativeOpen(rec){return effectiveAnimalData(rec).presence==='Présent'&&!rec?.conclusion&&!norm(rec?.followupStatus).includes('conclusion')}
 function trackingOpen(rec){return !rec?.excinClosed}
-function trackingToClose(rec){return !rec?.excinClosed&&closureCandidate(rec)}
+function closureCandidateSignature(rec){
+  const e=effectiveAnimalData(rec);
+  const fav=resultLooksFavorable(rec)?norm([rec?.result,rec?.control,rec?.serology,rec?.serologyResult,rec?.repeatSerology,rec?.conclusion].join(' ')):'';
+  return `${String(e.exitDate||'').slice(0,10)}|${fav}`;
+}
+function closureBaselineMatches(rec){const sig=String(rec?.agdsClosureBaselineSig||'');return !!sig&&sig===closureCandidateSignature(rec)}
+function trackingToClose(rec){return !rec?.excinClosed&&closureCandidate(rec)&&!closureBaselineMatches(rec)}
 function trackingClosureEvidence(rec){const e=effectiveAnimalData(rec),parts=[];if(e.exitDate)parts.push(`Sortie ${fmtDate(e.exitDate)}`);const r=String(rec?.result||rec?.control||rec?.serology||rec?.serologyResult||rec?.repeatSerology||rec?.pcr||rec?.pcrResult||'').trim();if(r&&resultLooksFavorable(rec))parts.push(`Contrôle favorable : ${r}`);return parts.join(' · ')}
 function monthsAgoDate(months){const d=new Date();const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()-months);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return d}
 function motherDescendanceAlertKey(ede,motherId){return `${String(ede||'')}|${String(motherId||'')}`}
@@ -42,13 +48,15 @@ function motherDescendanceAlertsHTML(){const rows=motherDescendanceAlerts();if(!
 function agdsControlRows(){
   const rows=[];
   for(const d of state.descendants.filter(trackingOpen)){
-    const e=effectiveAnimalData(d),known=!!d.excinAgds,canClose=closureCandidate(d),evidence=trackingClosureEvidence(d),h=herdByEde(d.ede)||{};
+    if(closureCandidate(d)&&closureBaselineMatches(d))continue;
+    const e=effectiveAnimalData(d),known=!!d.excinAgds,canClose=trackingToClose(d),evidence=trackingClosureEvidence(d),h=herdByEde(d.ede)||{};
     const category=canClose?(known?'À clôturer AGDS':'Créer + clôturer AGDS'):(known?'À vérifier AGDS – suivi ouvert':'À vérifier / créer AGDS');
     rows.push({kind:'Descendant',code:'EXCME',id:d.id,ede:d.ede,herdName:h.name||'',animalId:d.animalId,motherId:e.motherId||d.motherId||'',entryDate:'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:d.result||d.control||'',agdsKnown:known,category,evidence,paratuAfter:'Si le retour AGDS confirme une date de fin EXCME, Paratu marquera le suivi clôturé. Sinon le suivi restera ouvert.'});
   }
   for(const i of state.introductions.filter(trackingOpen)){
     const h=herdByEde(i.ede)||{};if(!norm(h.mode).includes('garantie'))continue;
-    const e=effectiveAnimalData(i),known=!!i.excinAgds,canClose=closureCandidate(i),evidence=trackingClosureEvidence(i);
+    if(closureCandidate(i)&&closureBaselineMatches(i))continue;
+    const e=effectiveAnimalData(i),known=!!i.excinAgds,canClose=trackingToClose(i),evidence=trackingClosureEvidence(i);
     const category=canClose?(known?'À clôturer AGDS':'Créer + clôturer AGDS'):(known?'À vérifier AGDS – suivi ouvert':'À vérifier / créer AGDS');
     rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:i.result||i.control||i.serology||i.pcr||'',agdsKnown:known,category,evidence,paratuAfter:'Si le retour AGDS confirme une date de fin EXCIN, Paratu marquera le suivi clôturé. Sinon le suivi restera ouvert.'});
   }
@@ -148,6 +156,33 @@ async function baselineExistingMotherDescendanceAlerts(){
   if(state.meta.motherDescendanceBaselineVerifiedV145)return;
   const keys=motherDescendanceAlerts().map(r=>motherDescendanceAlertKey(r.ede,r.motherId));
   await setMeta('motherDescendanceBaselineVerifiedV145',{doneAt:new Date().toISOString(),keys,note:'Alertes historiques de descendance des mères sorties considérées déjà vérifiées ; seules les nouvelles situations ressortiront ensuite.'});
+}
+
+async function baselineExistingAgdsClosureAlerts(){
+  // T0 v1.2.46 : toutes les alertes "À clôturer AGDS" présentes au moment de la mise à jour
+  // sont acquittées sans marquer artificiellement les événements comme clôturés.
+  // Une nouvelle sortie / un nouveau contrôle favorable modifiera la signature et pourra
+  // donc faire réapparaître une alerte après le T0.
+  if(state.meta.agdsClosureBaselineV146)return;
+  let descendants=0,introductions=0;
+  const doneAt=new Date().toISOString();
+  for(let i=0;i<state.descendants.length;i++){
+    const d=state.descendants[i];
+    if(trackingOpen(d)&&closureCandidate(d)){
+      const sig=closureCandidateSignature(d);
+      const obj={...d,agdsClosureBaselineSig:sig,agdsClosureBaselineAt:doneAt,agdsClosureBaseline:true};
+      await db.put('descendants',obj);state.descendants[i]=obj;descendants++;
+    }
+  }
+  for(let i=0;i<state.introductions.length;i++){
+    const it=state.introductions[i];
+    if(trackingOpen(it)&&closureCandidate(it)){
+      const sig=closureCandidateSignature(it);
+      const obj={...it,agdsClosureBaselineSig:sig,agdsClosureBaselineAt:doneAt,agdsClosureBaseline:true};
+      await db.put('introductions',obj);state.introductions[i]=obj;introductions++;
+    }
+  }
+  await setMeta('agdsClosureBaselineV146',{doneAt,descendants,introductions,note:'T0 : alertes À clôturer AGDS historiques acquittées sans modifier la clôture métier. Seules les nouvelles évolutions ressortiront.'});
 }
 
 function getCampaignsList(){const set=new Set(state.campaigns.map(x=>x.campaign).filter(Boolean));set.add(state.campaign); return [...set].sort((a,b)=>b.localeCompare(a))}
@@ -1044,6 +1079,7 @@ async function importTrackingFile(file,kind){
     if(old)sum.already++;else sum.added++;
 
     const canClose=closureCandidate(obj);
+    const toCloseNow=trackingToClose(obj);
     let category='',action='';
     if(obj.excinClosed){
       sum.resurfacedClosed++;
@@ -1057,7 +1093,7 @@ async function importTrackingFile(file,kind){
       sum.pendingCreate++;
       category='À traiter dans AGDS';
       action=`Créer l'événement ${code} dans AGDS`;
-    }else if(canClose){
+    }else if(toCloseNow){
       sum.toClose++;
       category='À clôturer AGDS';
       action=`Clôturer l'événement ${code} dans AGDS`;
@@ -1206,5 +1242,5 @@ async function installApp(){
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});

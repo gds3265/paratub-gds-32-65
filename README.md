@@ -268,3 +268,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Les situations déjà présentes lors de la mise à jour sont considérées vérifiées d’après les anciennes fiches éleveur.
 - Les nouvelles situations détectées après cette remise à zéro ressortent normalement.
 
+
+## v1.2.46
+- Mise en place d'un état initial T0 pour les alertes « À clôturer AGDS ».
+- Toutes les alertes de clôture déjà présentes lors du premier démarrage en v1.2.46 sont acquittées sans marquer artificiellement EXCME/EXCIN comme clôturés.
+- Les compteurs Campagne, fiches éleveur et Contrôle AGDS n'affichent plus ce stock historique.
+- Une nouvelle sortie ou un nouveau contrôle favorable après le T0 peut faire réapparaître une alerte, grâce à une signature de l'état ayant été acquitté au T0.
