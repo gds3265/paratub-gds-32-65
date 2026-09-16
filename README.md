@@ -1,3 +1,8 @@
+## v1.2.55 - Remboursements et exports départementaux
+
+- Le bouton de remboursement du Gers ouvre directement sa saisie depuis le cadre, avec EDE embarqué dans le bouton pour fiabiliser le clic.
+- Suppression des exports combinés 32+65 : toutes les listes de cheptels sont désormais proposées séparément pour le 32 et le 65.
+
 ## v1.2.54 - Correctif démarrage
 - Corrige l’erreur `views is not defined` qui bloquait tout l’affichage central.
 - Restaure toutes les vues de navigation sans toucher aux données locales.
