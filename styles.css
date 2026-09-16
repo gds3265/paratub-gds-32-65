@@ -57,3 +57,11 @@
 
 /* v1.2.48 - taux de réalisation des analyses */
 .coverage{display:flex;flex-direction:column;gap:2px;min-width:128px}.coverage small{font-size:11px}.coverage-low{background:#fde8e8;border:1px solid #dc2626;border-radius:8px;padding:6px;color:#991b1b}.coverage-ok{background:#eef8ee;border:1px solid #8bc48b;border-radius:8px;padding:6px;color:#256029}.coverage-preview{min-height:40px;display:flex;align-items:center;gap:6px}.coverage-low-text{color:#b91c1c}.coverage-ok-text{color:#217a37}
+
+/* v1.2.51 — programmation >40 et exports AGDS */
+.programming-over40 td{background:#fff3e0!important;}
+.programming-over40{box-shadow:inset 4px 0 0 #e65100;}
+.over40-badge{display:inline-block;margin-left:8px;padding:3px 7px;border-radius:999px;background:#ffe0b2;color:#9a3d00;font-weight:700;font-size:.78rem;white-space:nowrap;}
+.over40-pill{background:#fff3e0!important;color:#9a3d00!important;border:1px solid #ffcc80;}
+.programming-extra-tools{margin:12px 0;}
+.export-grid{display:flex;flex-wrap:wrap;gap:8px;}

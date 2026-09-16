@@ -1,4 +1,4 @@
-## v1.2.49 - Modification des analyses et assainissement sans assistant
+## v1.2.51 - Modification des analyses et assainissement sans assistant
 
 - Les analyses saisies manuellement peuvent être modifiées ou supprimées depuis la fiche éleveur.
 - L'assistant référentiel et la proposition associée sont masqués pour les cheptels en assainissement.
@@ -293,3 +293,12 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Correction : modifier uniquement une date de sortie sur un non négatif existant ne demande plus de renseigner une sérologie ou une PCR.
 - Saisie rapide des dates : JJMMAA accepté dans les formulaires de suivi (ex. 220526), affichage JJ/MM/AA.
 - Les dates restent stockées au format ISO en base pour conserver les tris et calculs.
+
+## v1.2.51
+- Analyses manuelles réellement modifiables, même si elles coexistent avec des lots importés.
+- Ajout des résultats hémolysés et ininterprétables dans la saisie et les tableaux.
+- Saisie dédiée des remboursements Gers depuis la fiche éleveur.
+- Correction de la persistance du commentaire de situation.
+- Export dédié des bovins introduits.
+- Gestion des droits Lecture / Écriture / Admin explicitée dans Paramètres (Supabase).
+- Date/heure de dernière mise à jour affichée sur chaque fiche éleveur et alimentée par les modifications principales.
