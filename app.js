@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.53 — PWA multi-support */
-const APP_VERSION='1.2.53';
+/* Paratuberculose GDS 32-65 v1.2.54 — PWA multi-support */
+const APP_VERSION='1.2.54';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -1477,6 +1477,96 @@ async function installApp(){
   else if(/android/i.test(ua)) toast('Dans Chrome : menu ⋮ → Installer l’application / Ajouter à l’écran d’accueil.');
   else toast('Dans Chrome/Edge : utilise l’icône d’installation dans la barre d’adresse ou le menu ⋮ → Installer Paratuberculose GDS 32-65.');
 }
+
+
+
+/* ===== Correctifs v1.2.54 : fiche, analyses, remboursements, exports, programmation ===== */
+function manualAnalysisRowsForHerd(ede,campaign=state.campaign){
+  return state.analysisLots.filter(x=>x.manual&&String(x.ede)===String(ede)&&String(x.campaign)===String(campaign))
+    .slice().sort((a,b)=>String(b.sampleDate||'').localeCompare(String(a.sampleDate||''))||String(b.id||'').localeCompare(String(a.id||'')));
+}
+function analysisLotCoverageHTML(lot){
+  const planned=num(lot.plannedCount),tested=num(lot.tested);
+  if(!planned)return '—';
+  const rate=tested/planned*100;
+  return `<div class="coverage-box ${rate<95?'coverage-low':'coverage-ok'}"><b>${pct1(rate)}</b><br><small>${tested} / ${planned} prévus</small></div>`;
+}
+function analysisDetailForHerdHTML(ede,campaign=state.campaign){
+  const manual=manualAnalysisRowsForHerd(ede,campaign);
+  if(manual.length){
+    return `<div class="table-wrap"><table><thead><tr><th>Population prévue</th><th>Programmés</th><th>Dépistés</th><th>Réalisation</th><th>Négatifs</th><th>Positifs</th><th>Douteux</th><th>Hémolysés</th><th>Ininterprétables</th><th>Prélèvement</th><th>Dossier labo</th><th></th></tr></thead><tbody>${manual.map(r=>`<tr><td>${esc(r.plannedPopulation||analysisPopulationForHerd(ede,campaign)||'À préciser')}</td><td>${num(r.plannedCount)||'—'}</td><td>${num(r.tested)}</td><td>${analysisLotCoverageHTML(r)}</td><td>${num(r.negative)}</td><td><strong>${num(r.positive)}</strong></td><td>${num(r.doubtful)}</td><td>${num(r.hemolyzed)}</td><td>${num(r.uninterpretable)}</td><td>${fmtDate(r.sampleDate)}</td><td>${esc(r.labFile||'')}</td><td><button class="ghost analysis-edit" data-analysis-id="${esc(r.id)}">Modifier</button></td></tr>`).join('')}</tbody></table></div>`;
+  }
+  const a=effectiveAnalysisForHerd(ede,campaign);
+  return a?analysisTable([a]):'<div class="empty">Aucun résultat de prophylaxie enregistré pour cette campagne.</div>';
+}
+
+function herdDetailHTML(ede){
+  if(!ede)return pageHead('Éleveur','Aucun dossier sélectionné');
+  const h=herdByEde(ede)||{ede},hist=historyFor(ede),nn=state.nonnegatives.filter(x=>String(x.ede)===String(ede)),desc=state.descendants.filter(x=>String(x.ede)===String(ede)),intro=state.introductions.filter(x=>String(x.ede)===String(ede)),c=currentCampaignRecord(ede)||{},a=effectiveAnalysisForHerd(ede),p=managementProposal(ede,a),isGuarantee=norm(h.mode).includes('garantie'),qAgds=String(h.qualificationAgds||h.currentQualification||'').trim(),oop=activeOutOfProphyPositive(ede,state.campaign),qSigalBase=canonicalSigal(sigalQualificationDisplay(h,c)),qSigal=oop?'S1':qSigalBase,qSigalSource=oop?'Décision plus récente dans l’application : PCR positive hors prophylaxie':sigalQualificationSource(h,c),qStatus=oop?'Garantie suspendue':(h.statusOverride||statusForQualification(qAgds,qSigal)),qCurrent=qSigal||qAgds||c.status||h.currentQualification,protocolYear=c.protocolYear||protocolYearValue(c,h)||'',nnPresent=nn.filter(x=>effectiveAnimalData(x).presence==='Présent').length,nnOpen=nn.filter(nonNegativeOpen).length,descOpen=desc.filter(trackingOpen).length,descClose=desc.filter(trackingToClose).length,introOpen=intro.filter(trackingOpen).length,introClose=intro.filter(trackingToClose).length;
+  return `<button class="ghost back-btn" id="backToHerds">← Retour</button>
+  <div class="herd-head"><div>${pageHead(h.name||'Éleveur',`EDE ${esc(ede)} · département ${esc(h.dept||'')}`)}</div><div class="stat-line">${badgeMode(h.mode)}<span class="stat-pill">${esc(qCurrent||'Qualification non renseignée')}</span><span class="stat-pill update-pill"><b>Dernière MAJ :</b> ${esc(herdLastUpdateLabel(h))}</span></div></div>
+  <div class="grid kpi-grid">${herdKpi('Non négatifs présents',nnPresent,`${nnOpen} dossier(s) en cours`,'nonneg','present')}${herdKpi('Descendants à suivre',descOpen,descClose?`${descClose} à vérifier / clôturer AGDS`:'aucun à clôturer détecté','desc','open')}${isGuarantee?herdKpi('Introductions à suivre',introOpen,introClose?`${introClose} à vérifier / clôturer AGDS`:'aucune à clôturer détectée','intro','open'):''}</div>
+  <div class="quick-followup card"><div><span>Maintenant</span><strong>${esc(qStatus)}${protocolYear||protocolStageLabel(c,h)?` · ${esc(protocolYear||protocolStageLabel(c,h))}`:''}</strong></div><div><span>À faire ensuite</span><strong>${esc(campaignAction({...c,analysis:a}).label)}</strong><small>${esc(nextScreeningFromHistory(ede))}</small></div><div><span>Suivis animaux</span><strong>${nnOpen} non négatif(s) · ${descOpen} EXCME ouvert(s)${isGuarantee?` · ${introOpen} EXCIN ouvert(s)`:''}</strong></div></div>
+  <div class="section-nav"><a href="#situation">Situation</a><a href="#analyses">Analyses</a><a href="#nonneg">Non négatifs (${nn.length})</a><a href="#desc">Descendants (${desc.length})</a>${isGuarantee?`<a href="#intro">Introductions (${intro.length})</a>`:''}<a href="#history">Historique</a></div>
+  <section id="situation" class="herd-section card"><div class="page-head"><div><h2>Situation et suite prévue</h2><p>Lecture chronologique N-1 → N → N+1</p></div><button class="ghost" id="btnEditHerd">Modifier la fiche</button></div>
+  <div class="card" style="margin-bottom:12px"><h3>N-1 · situation précédente</h3><div class="form-grid"><div><b>Campagne</b><br>${esc(h.previousCampaign||'Non renseignée')}</div><div><b>Qualification AGDS</b><br>${esc(qualFull(h.previousAgds||'','agds')||'Non renseignée')}</div><div><b>Qualification SIGAL</b><br>${esc(qualFull(h.previousSigal||h.qualificationNational||'','sigal')||h.previousSigal||h.qualificationNational||'Non renseignée')}</div><div><b>Statut</b><br>${esc(h.previousStatus||'Non renseigné')}</div></div></div>
+  <div class="card current-situation-card" style="margin-bottom:12px"><h3>N · situation actuelle</h3><div class="form-grid"><div><b>Campagne</b><br>${esc(h.currentStatusCampaign||state.campaign)}</div><div><b>Qualification AGDS</b><br>${esc(qualFull(qAgds,'agds')||qAgds||'Non renseignée')}</div><div><b>Qualification SIGAL</b><br>${esc(qualFull(qSigal,'sigal')||qSigal||'Non renseignée')}</div><div><b>Statut</b><br><b>${esc(qStatus)}</b> <span class="help">${esc(currentStatusTrace(h))}</span></div><div><b>Année protocole / ancienneté</b><br>${esc(protocolYear||protocolStageLabel(c,h)||'Non renseignée')}</div><div><b>Source SIGAL</b><br><span class="help">${esc(qSigalSource)}</span></div></div></div>
+  <div class="card"><h3>N+1 · suite prévue</h3><div><b>Type de dépistage</b><br>${esc(nextScreeningFromHistory(ede))}</div></div>
+  <div class="field full" style="margin-top:12px"><b>Pourquoi / commentaire</b><br>${esc(h.comment||h.currentSituation||'')}</div>${statusHistoryHTML(h)}
+  ${Number(h.dept)===32?`<div class="reimbursement-box"><div class="page-head"><div><h3>Remboursement analyses - Gers (32)</h3><p class="help">Saisie indépendante de la fiche de situation.</p></div><button class="primary" id="btnEditReimbursement">Saisir / modifier</button></div><div class="form-grid"><div><b>Facture reçue</b><br>${esc(h.invoiceReceived||'Non')}</div><div><b>Date réception</b><br>${fmtDate(h.invoiceReceivedDate)}</div><div><b>Année de remboursement</b><br>${esc(h.reimbursementYear||'Non renseignée')} / 4</div><div><b>Date réponse compta</b><br>${fmtDate(h.accountingReplyDate)}</div></div></div>`:''}
+  ${isGuarantee?`<div class="actions" style="margin:12px 0"><button class="primary" id="btnHerdAssistant">Ouvrir l’assistant référentiel</button></div>${decisionHTML(p)}`:''}</section>
+  <section id="analyses" class="herd-section card"><div class="page-head"><div><h2>Analyses - ${esc(state.campaign)}</h2></div><button class="primary" id="btnAddAnalysisForHerd">+ Saisir une analyse</button></div>${outOfProphySummaryHTML(ede)}${analysisDetailForHerdHTML(ede)}</section>
+  <div class="herd-management-grid"><section id="nonneg" class="herd-section card management-panel"><div class="page-head"><div><h2>Non négatifs</h2><p>${nn.length} animal(aux) · présence automatique : sans date de sortie = présent</p></div><button class="primary" id="btnAddNNForHerd">+ Ajouter</button></div>${nonNegTableForHerd(nn)}</section><section id="desc" class="herd-section card management-panel"><div class="page-head"><div><h2>Descendants</h2><p>${descOpen} non clôturé(s)${descClose?` · ${descClose} à clôturer AGDS`:''}</p></div><button class="primary" id="btnAddDescForHerd">+ Ajouter</button></div>${descendantTable(desc)}</section>${isGuarantee?`<section id="intro" class="herd-section card management-panel"><div class="page-head"><div><h2>Introductions</h2><p>${introOpen} non clôturée(s)${introClose?` · ${introClose} à clôturer AGDS`:''}</p></div><button class="primary" id="btnAddIntroForHerd">+ Ajouter</button></div>${introductionTable(intro)}</section>`:''}</div>
+  <section id="history" class="herd-section card"><h2>Historique campagnes</h2><p class="help">Chaque campagne est modifiable. Hémolysés et ininterprétables sont inclus dans le détail des résultats lorsqu’ils existent.</p><div class="timeline">${hist.map(historyEventHTML).join('')||'<div class="empty">Pas d’historique.</div>'}</div></section>`;
+}
+
+function programmingTableHTML(rows){
+  if(!rows.length)return'<div class="empty">Aucun cheptel dans cette catégorie.</div>';
+  return `<div class="table-wrap"><table><thead><tr><th>Dépt</th><th>EDE</th><th>Éleveur</th><th>Mode</th><th>Statut actuel</th><th>Programmation ${esc(nextCampaign())}</th><th>Bovins à dépister</th><th>&gt;40 ?</th><th>Source</th></tr></thead><tbody>${rows.map(r=>{const n=programmedAnimalCount(r);return`<tr class="click-row ${n>40?'programming-over40':''}" data-herd="${esc(r.ede)}"><td>${esc(r.dept)}</td><td><strong>${esc(r.ede)}</strong></td><td>${esc(r.name)}</td><td>${badgeMode(r.mode)}</td><td>${esc(r.currentStatus)}</td><td><strong>${esc(r.category)}</strong><br><small>${esc(r.programming)}</small></td><td><strong>${n||0}</strong></td><td>${n>40?`<span class="over40-badge">Oui · ${n}</span>`:'Non'}</td><td>${esc(r.source)}</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function programmingViewHTML(){
+  const rows=filteredProgrammingRows();
+  return pageHead('Programmation N+1',`Préparation de la campagne ${esc(nextCampaign())} à partir de ${esc(state.campaign)}`)+`<div class="card"><div class="toolbar"><input id="progQ" type="search" placeholder="EDE, éleveur, statut, programmation…"><select id="progDept"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="progMode"><option value="">Garantie + Assainissement</option><option>Garantie</option><option>Assainissement</option></select><select id="progCat"><option value="">Toutes les programmations</option><option>Année intermédiaire</option><option>&gt;24 mois</option><option>24-72 mois</option><option>À vérifier</option></select></div><p class="help">La charge de dépistage est affichée directement au niveau de chaque cheptel. Les lignes &gt;40 animaux sont mises en évidence.</p><div id="programmingTable">${programmingTableHTML(rows)}</div></div>`;
+}
+function enhanceProgrammingUI(){
+  if(state.view!=='programming')return;
+  const table=$('#programmingTable'); if(!table)return;
+  let panel=$('#programmingExtraTools');
+  if(!panel){panel=document.createElement('div');panel.id='programmingExtraTools';panel.className='card programming-extra-tools';table.parentElement?.insertBefore(panel,table);}
+  panel.innerHTML=`<div class="page-head"><div><h2>Exports de la sélection</h2><p class="help">Même sélection que les filtres affichés ci-dessous.</p></div></div><div class="actions"><button class="primary" id="progExcelFull">Excel complet</button><button class="ghost" id="progCsvFull">CSV complet</button><button class="ghost" id="progCsvEde">CSV N° cheptel uniquement</button></div>`;
+  $('#progExcelFull').onclick=exportProgrammingExcel; $('#progCsvFull').onclick=()=>runExport('nextProgramming'); $('#progCsvEde').onclick=exportProgrammingEdeCsv;
+}
+
+function herdExportSelection(type){
+  let rows=[...state.herds];
+  if(type==='engages32'||type==='all32')rows=rows.filter(h=>Number(h.dept)===32);
+  else if(type==='engages65'||type==='all65')rows=rows.filter(h=>Number(h.dept)===65);
+  else if(type==='garantie')rows=rows.filter(h=>norm(h.mode).includes('garantie'));
+  else if(type==='garantie32')rows=rows.filter(h=>Number(h.dept)===32&&norm(h.mode).includes('garantie'));
+  else if(type==='garantie65')rows=rows.filter(h=>Number(h.dept)===65&&norm(h.mode).includes('garantie'));
+  else if(type==='ass')rows=rows.filter(h=>norm(h.mode).includes('assain'));
+  else if(type==='ass32')rows=rows.filter(h=>Number(h.dept)===32&&norm(h.mode).includes('assain'));
+  else if(type==='ass65')rows=rows.filter(h=>Number(h.dept)===65&&norm(h.mode).includes('assain'));
+  const seen=new Set();return rows.filter(h=>{const e=String(h.ede||'');if(!e||seen.has(e))return false;seen.add(e);return true});
+}
+function cleanHerdForExcel(h){
+  const out={};for(const [k,v] of Object.entries(h||{})){if(k==='raw')continue;out[k]=(v&&typeof v==='object')?JSON.stringify(v):v;}return out;
+}
+function exportHerdExcel(type,label='cheptels'){
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const rows=herdExportSelection(type).map(cleanHerdForExcel),wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun cheptel'}]);XLSX.utils.book_append_sheet(wb,ws,'CHEPTELS');XLSX.writeFile(wb,`PTB_${label}_${today()}.xlsx`);toast(`${rows.length} cheptel(s) exporté(s) en Excel`);
+}
+function exportHerdEdeCsv(type,label='cheptels'){
+  const rows=herdExportSelection(type).map(h=>({'N° cheptel':String(h.ede||'')}));download(`PTB_${label}_EDE_${today()}.csv`,toCSV(rows,['N° cheptel']),'text/csv;charset=utf-8');toast(`${rows.length} n° de cheptel exporté(s)`);
+}
+function herdExportRow(title,type){return `<tr><td><strong>${esc(title)}</strong></td><td>${herdExportSelection(type).length}</td><td><button class="ghost herd-xlsx" data-type="${esc(type)}" data-label="${esc(title.replace(/\s+/g,'_'))}">Excel complet</button></td><td><button class="ghost herd-ede-csv" data-type="${esc(type)}" data-label="${esc(title.replace(/\s+/g,'_'))}">CSV N° cheptel</button></td></tr>`;}
+views.exports=function(){return pageHead('Exports','Exports complets et fichiers AGDS minimalistes')+`<div class="card"><h2>Listes de cheptels</h2><p class="help">Excel complet = toutes les colonnes disponibles dans la fiche éleveur. CSV N° cheptel = une seule colonne, pour import AGDS.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Nombre</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${herdExportRow('Tous les engagés 32 + 65','engages')}${herdExportRow('Tous les engagés 32','engages32')}${herdExportRow('Tous les engagés 65','engages65')}${herdExportRow('Garantie 32 + 65','garantie')}${herdExportRow('Garantie 32','garantie32')}${herdExportRow('Garantie 65','garantie65')}${herdExportRow('Assainissement 32 + 65','ass')}${herdExportRow('Assainissement 32','ass32')}${herdExportRow('Assainissement 65','ass65')}</tbody></table></div></div><div class="card"><h2>Bovins</h2><div class="actions"><button class="primary export-btn" data-export="animalsPresent">Bovins présents des engagés</button><button class="ghost export-btn" data-export="animalsAll">Tous bovins chargés</button><button class="ghost export-btn" data-export="nonnegpresent">Non négatifs présents</button><button class="ghost export-btn" data-export="descendants">Descendants</button><button class="ghost export-btn" data-export="introducedAnimals">Bovins introduits</button></div></div><div class="card"><h2>Suivi campagne</h2><div class="actions"><button class="ghost export-btn" data-export="positifs">Cheptels positifs</button><button class="ghost export-btn" data-export="campaignFollowup">Suivi de tous les engagés</button><button class="ghost export-btn" data-export="introductions">Introductions</button></div></div><div class="card"><h2>Sauvegarde complète Excel</h2><button class="primary" id="exportFullExcel">Exporter toute la base en Excel</button></div>`;};
+function enhanceExportsUI(){
+  if(state.view!=='exports')return;
+  $$('.herd-xlsx').forEach(b=>b.onclick=()=>exportHerdExcel(b.dataset.type,b.dataset.label||b.dataset.type));
+  $$('.herd-ede-csv').forEach(b=>b.onclick=()=>exportHerdEdeCsv(b.dataset.type,b.dataset.label||b.dataset.type));
+}
+/* ===== fin correctifs v1.2.54 ===== */
 
 async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});

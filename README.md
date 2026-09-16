@@ -1,9 +1,9 @@
-## v1.2.53 - Correctif démarrage
+## v1.2.54 - Correctif démarrage
 - Corrige l’erreur `views is not defined` qui bloquait tout l’affichage central.
 - Restaure toutes les vues de navigation sans toucher aux données locales.
-- Conserve les ajouts v1.2.50/v1.2.53, dont exports AGDS et programmation >40.
+- Conserve les ajouts v1.2.50/v1.2.54, dont exports AGDS et programmation >40.
 
-## v1.2.53 - Modification des analyses et assainissement sans assistant
+## v1.2.54 - Modification des analyses et assainissement sans assistant
 
 - Les analyses saisies manuellement peuvent être modifiées ou supprimées depuis la fiche éleveur.
 - L'assistant référentiel et la proposition associée sont masqués pour les cheptels en assainissement.
@@ -299,7 +299,7 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Saisie rapide des dates : JJMMAA accepté dans les formulaires de suivi (ex. 220526), affichage JJ/MM/AA.
 - Les dates restent stockées au format ISO en base pour conserver les tris et calculs.
 
-## v1.2.53
+## v1.2.54
 - Analyses manuelles réellement modifiables, même si elles coexistent avec des lots importés.
 - Ajout des résultats hémolysés et ininterprétables dans la saisie et les tableaux.
 - Saisie dédiée des remboursements Gers depuis la fiche éleveur.
