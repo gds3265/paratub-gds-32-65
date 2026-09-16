@@ -1,3 +1,9 @@
+## v1.2.49 - Modification des analyses et assainissement sans assistant
+
+- Les analyses saisies manuellement peuvent être modifiées ou supprimées depuis la fiche éleveur.
+- L'assistant référentiel et la proposition associée sont masqués pour les cheptels en assainissement.
+- Le bouton Traiter lié au référentiel reste réservé aux cheptels en garantie.
+
 ## v1.2.48 - Assainissement et taux de réalisation
 - L’assistant référentiel distingue désormais strictement les cheptels en Assainissement : il ne propose plus un statut Favorable A/B réservé à la Garantie.
 - La saisie manuelle d’une analyse préremplit la population prévue (>24 mois ou 24-72 mois) depuis la programmation de campagne.
