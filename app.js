@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.55 — PWA multi-support */
-const APP_VERSION='1.2.55';
+/* Paratuberculose GDS 32-65 v1.2.56 — PWA multi-support */
+const APP_VERSION='1.2.56';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -798,7 +798,7 @@ function balance(){const a=departmentBalance(32),b=departmentBalance(65),bounds=
 function deptBalanceHTML(dept){const b=departmentBalance(dept),due=Math.max(0,b.herds-b.intermediate),bounds=campaignBounds();return`<section class="card dept-balance"><h2>Département ${dept}</h2><p class="help"><strong>Période du bilan :</strong> ${esc(bounds.label)}</p><div class="grid kpi-grid">${kpi('Engagés',b.herds,`${b.guarantee} Garantie · ${b.assainissement} Assainissement`)}${kpi('Résultats reçus',b.received,`${b.missing} en attente sur ${due} cheptels à dépister`)}${kpi('Années intermédiaires',b.intermediate,'aucun dépistage prévu cette campagne')}${kpi('Non négatifs détectés',b.nonNegDetected,`${b.nonNegKnownMother} dont la mère était déjà connue non négative (${b.nonNegKnownMotherPct} %) · ${bounds.label}`)}</div><div class="charts charts-two"><div class="chart-card">${pie(b.guarantee,b.herds)}<div class="legend"><b>Mode de suivi</b><div class="legend-items vertical"><span><i style="background:#8e2c6d"></i>Garantie : <strong>${b.guarantee}</strong></span><span><i style="background:#e7eaec"></i>Assainissement : <strong>${b.assainissement}</strong></span></div><small>Total : ${b.herds} engagés · ${esc(bounds.label)}</small></div></div><div class="chart-card">${pie(b.received,Math.max(due,1),'#43a047','#eceff1')}<div class="legend"><b>Avancement de la campagne</b><div class="legend-items vertical"><span><i style="background:#43a047"></i>Résultats reçus : <strong>${b.received}</strong></span><span><i style="background:#eceff1;border:1px solid #cfd8dc"></i>En attente : <strong>${b.missing}</strong></span></div><small>${esc(bounds.label)} · dénominateur : ${due} cheptels devant être dépistés. ${b.intermediate} année(s) intermédiaire(s) exclue(s) du ratio.</small></div></div></div><div class="charts cause-chart-row">${exitCauseChart(dept)}${descendantExitCauseChart(dept)}</div></section>`}
 function balanceHTML(){const b=balance();return`<div class="stat-line"><span class="stat-pill">${b.herds} engagés</span><span class="stat-pill">${b.guarantee} Garantie</span><span class="stat-pill">${b.assainissement} Assainissement</span><span class="stat-pill">${b.herdsTested} dépistés</span><span class="stat-pill">${b.animalsTested} bovins analysés</span><span class="stat-pill">${b.nonNegDetected} non négatifs détectés</span><span class="stat-pill">${b.nonNegKnownMother} avec mère déjà non négative</span></div>`}
 
-function bindView(){
+function bindViewLegacy(){
   $$('[data-go]').forEach(b=>b.onclick=()=>{state.view=b.dataset.go;render()});
   $$('[data-herd]').forEach(r=>r.onclick=()=>openHerd(r.dataset.herd));
   $$('.analysis-treat').forEach(b=>b.onclick=e=>{e.stopPropagation();openTreatment(b.dataset.ede)});
@@ -1084,6 +1084,26 @@ function bindView(){
   if($('#restoreJsonBtn')) $('#restoreJsonBtn').onclick=()=>$('#restoreJsonInput').click();
   if($('#restoreJsonInput')) $('#restoreJsonInput').onchange=e=>restoreBackup(e.target.files[0]);
   if($('#resetDbBtn')) $('#resetDbBtn').onclick=resetDb;
+
+  // v1.2.56 — branchements explicites des actions ajoutées dans les vues récentes.
+  // Le second bindView historique écrasait auparavant ces gestionnaires.
+  $$('[data-edit-reimbursement]').forEach(b=>b.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    openReimbursementForm(b.dataset.editReimbursement||state.selectedHerd);
+  });
+  $$('.analysis-manual-list').forEach(b=>b.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    openManualAnalysisList(b.dataset.ede,b.dataset.campaign,b.dataset.ids||'');
+  });
+  $$('.herd-xlsx').forEach(b=>b.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    exportHerdExcel(b.dataset.type,b.dataset.label||b.dataset.type);
+  });
+  $$('.herd-ede-csv').forEach(b=>b.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    exportHerdEdeCsv(b.dataset.type,b.dataset.label||b.dataset.type);
+  });
+  enhanceExtraViewUI();
 }
 function applyProgrammingFilters(){const box=$('#programmingTable');if(!box)return;box.innerHTML=programmingTableHTML(filteredProgrammingRows());$$('[data-herd]',box).forEach(r=>r.onclick=()=>openHerd(r.dataset.herd))}
 function campaignResultReallyMissing(c){const a=c?.analysis;if(a)return false;if(activeOutOfProphyPositive(c?.ede,c?.campaign||state.campaign))return false;if(isIntermediateCampaign(c,herdByEde(c?.ede)))return false;if(num(c?.tested)>0)return false;return true}
@@ -1571,4 +1591,4 @@ function enhanceExportsUI(){
 async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
-/* v1.2.55 : remboursement direct fiabilisé + exports strictement séparés 32/65 */
+/* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
