@@ -1,3 +1,10 @@
+## v1.2.48 - Assainissement et taux de réalisation
+- L’assistant référentiel distingue désormais strictement les cheptels en Assainissement : il ne propose plus un statut Favorable A/B réservé à la Garantie.
+- La saisie manuelle d’une analyse préremplit la population prévue (>24 mois ou 24-72 mois) depuis la programmation de campagne.
+- Ajout du nombre de bovins programmés, du nombre de douteux et du calcul automatique des négatifs.
+- Calcul du taux de réalisation (dépistés / programmés) et des proportions négatifs / positifs / douteux rapportées aux bovins programmés.
+- Le taux est signalé en rouge s’il est inférieur à 95 %, et le moteur ne propose plus automatiquement une validation favorable tant que le dépistage est incomplet.
+
 ## v1.2.39 - filtre résultats non reçus + version PWA
 - Le filtre « Résultat non reçu » exclut désormais les années intermédiaires sans dépistage, les résultats historiques déjà enregistrés et les PCR positives hors prophylaxie.
 - L'affichage de version, le manifeste PWA, les icônes et le cache sont synchronisés sur v1.2.39.
