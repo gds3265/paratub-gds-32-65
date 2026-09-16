@@ -65,3 +65,11 @@
 .over40-pill{background:#fff3e0!important;color:#9a3d00!important;border:1px solid #ffcc80;}
 .programming-extra-tools{margin:12px 0;}
 .export-grid{display:flex;flex-wrap:wrap;gap:8px;}
+
+/* v1.2.57 */
+.programming-table th,.programming-table td{vertical-align:top}
+.programming-table .programming-over40{background:#fff1dc!important}
+.programming-table .over40-badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#f7c66b;color:#5b3900;font-weight:800;white-space:nowrap}
+.programming-table small{color:#667784}
+.memo-card ol{margin:8px 0 0 22px;padding:0}.memo-card li{margin:8px 0;line-height:1.45}
+@media print{.sidebar,.topbar,#printMemo{display:none!important}.app-shell{display:block}.content{padding:0}.card{box-shadow:none;break-inside:avoid}}

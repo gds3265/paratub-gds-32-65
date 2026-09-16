@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.56 — PWA multi-support */
-const APP_VERSION='1.2.56';
+/* Paratuberculose GDS 32-65 v1.2.57 — PWA multi-support */
+const APP_VERSION='1.2.57';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -63,6 +63,7 @@ function motherDescendanceAlertsHTML(){const rows=motherDescendanceAlerts();if(!
 function agdsControlRows(){
   const rows=[];
   for(const d of state.descendants.filter(trackingOpen)){
+    if(d.agdsReviewBaselineV157&&!closureCandidate(d))continue;
     if(closureCandidate(d)&&closureBaselineMatches(d))continue;
     const e=effectiveAnimalData(d),known=!!d.excinAgds,canClose=trackingToClose(d),evidence=trackingClosureEvidence(d),h=herdByEde(d.ede)||{};
     const category=canClose?(known?'À clôturer AGDS':'Créer + clôturer AGDS'):(known?'À vérifier AGDS – suivi ouvert':'À vérifier / créer AGDS');
@@ -70,6 +71,7 @@ function agdsControlRows(){
   }
   for(const i of state.introductions.filter(trackingOpen)){
     const h=herdByEde(i.ede)||{};if(!norm(h.mode).includes('garantie'))continue;
+    if(i.agdsReviewBaselineV157&&!closureCandidate(i))continue;
     if(closureCandidate(i)&&closureBaselineMatches(i))continue;
     const e=effectiveAnimalData(i),known=!!i.excinAgds,canClose=trackingToClose(i),evidence=trackingClosureEvidence(i);
     const category=canClose?(known?'À clôturer AGDS':'Créer + clôturer AGDS'):(known?'À vérifier AGDS – suivi ouvert':'À vérifier / créer AGDS');
@@ -1588,7 +1590,134 @@ function enhanceExportsUI(){
 }
 /* ===== fin correctifs v1.2.54 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+
+/* ===== v1.2.57 : programmation à la date anniversaire, MAJ animaux/vétérinaires, mémo ===== */
+async function applyV157DataUpdate(){
+  if(state.meta.dataUpdateV157)return;
+  const u=window.PTB_V157_UPDATE;if(!u)return;
+  if(Array.isArray(u.animals)){
+    await db.clear('animals');
+    if(u.animals.length)await db.bulkPut('animals',u.animals);
+  }
+  const hmap=new Map((u.herds||[]).map(x=>[String(x.ede),x]));
+  const changed=[];
+  for(const h of state.herds){
+    const p=hmap.get(String(h.ede));if(!p)continue;
+    changed.push({...h,vet:p.vet||h.vet||'',vetCabinet:p.vetCabinet||p.vet||h.vetCabinet||h.vet||'',vetOrderNo:p.vetOrderNo||'',vetCommune:p.vetCommune||'',prophyLastDate:p.prophyLastDate||h.prophyLastDate||'',prophyAnniversaryDefault:p.prophyAnniversaryDefault||h.prophyAnniversaryDefault||'',prophyDateSource:p.prophyDateSource||h.prophyDateSource||''});
+  }
+  if(changed.length)await db.bulkPut('herds',changed);
+  const introExisting=new Set(state.introductions.map(x=>`${x.ede}|${x.animalId}|${String(x.entryDate||x.introductionDate||'').slice(0,10)}`));
+  const descExisting=new Set(state.descendants.map(x=>`${x.ede}|${x.animalId}`));
+  for(const x of (u.newIntroductions||[])){const k=`${x.ede}|${x.animalId}|${String(x.entryDate||'').slice(0,10)}`;if(!introExisting.has(k)){await db.put('introductions',x);introExisting.add(k)}}
+  for(const x of (u.newDescendants||[])){const k=`${x.ede}|${x.animalId}`;if(!descExisting.has(k)){await db.put('descendants',x);descExisting.add(k)}}
+  const introByKey=new Map();
+  for(const x of await db.all('introductions')){const k=`${x.ede}|${x.animalId}|${String(x.entryDate||x.introductionDate||'').slice(0,10)}`;if(!introByKey.has(k))introByKey.set(k,[]);introByKey.get(k).push(x)}
+  const descByKey=new Map((await db.all('descendants')).map(x=>[`${x.ede}|${x.animalId}`,x]));
+  for(const e of (u.tracking65Events||[])){
+    if(e.kind==='EXCIN'){
+      for(const old of (introByKey.get(`${e.ede}|${e.animalId}|${String(e.entryDate||'').slice(0,10)}`)||[])){
+        const obj={...old,excinAgds:true,agdsEventStart:e.start||old.agdsEventStart||'',agdsEventEnd:e.end||old.agdsEventEnd||'',agdsSeenSource:'Export animaux AGDS 16/09/2026',agdsReviewBaselineV157:true};
+        if(e.end)obj.excinClosed=true;
+        else if(e.exitDate){obj.agdsClosureBaselineSig=`${e.exitDate}|`;obj.agdsClosureBaselineAt='2026-09-16T00:00:00';obj.agdsClosureBaseline=true}
+        await db.put('introductions',obj);
+      }
+    }else if(e.kind==='EXCME'){
+      const old=descByKey.get(`${e.ede}|${e.animalId}`);if(old){
+        const obj={...old,excinAgds:true,agdsEventStart:e.start||old.agdsEventStart||'',agdsEventEnd:e.end||old.agdsEventEnd||'',agdsSeenSource:'Export animaux AGDS 16/09/2026',agdsReviewBaselineV157:true};
+        if(e.end)obj.excinClosed=true;
+        else if(e.exitDate){obj.agdsClosureBaselineSig=`${e.exitDate}|`;obj.agdsClosureBaselineAt='2026-09-16T00:00:00';obj.agdsClosureBaseline=true}
+        await db.put('descendants',obj);
+      }
+    }
+  }
+  const vets=[...new Set((u.herds||[]).map(x=>String(x.vet||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  if(vets.length)await setMeta('veterinarianDirectory',vets.map((name,i)=>({id:`sigal_v157_${i}`,name})));
+  await setMeta('dataUpdateV157',{doneAt:new Date().toISOString(),animals:u.animals?.length||0,herds:changed.length,newIntroductions:u.newIntroductions?.length||0,newDescendants:u.newDescendants?.length||0,note:'Exports animaux 32/65 et SIGAL 00002 du 16/09/2026 intégrés. Les EXCIN/EXCME déjà présents dans l’export AGDS sont considérés traités.'});
+  await loadState();
+}
+function programmingOverrides(){return state.meta.programmingOverridesV157&&typeof state.meta.programmingOverridesV157==='object'?state.meta.programmingOverridesV157:{}}
+function programmingOverride(ede){return programmingOverrides()[String(ede)]||{}}
+function campaignYears(c=nextCampaign()){const m=String(c||'').match(/^(\d{4})\/(\d{4})$/);return m?[Number(m[1]),Number(m[2])]:[new Date().getFullYear(),new Date().getFullYear()+1]}
+function anniversaryForCampaignFromMonthDay(month,day){
+  const [y1,y2]=campaignYears();const year=month>=7?y1:y2;const d=new Date(year,month-1,day);return isNaN(d)?'':d.toISOString().slice(0,10);
+}
+function defaultProgrammingAnniversary(h){
+  if(!h)return'';
+  const last=dateISO(h.prophyLastDate||'');
+  if(last){const d=new Date(last+'T00:00:00'),[y1,y2]=campaignYears();let y=d.getMonth()+1>=7?y1:y2;const out=new Date(y,d.getMonth(),d.getDate());if(!isNaN(out))return out.toISOString().slice(0,10)}
+  const def=dateISO(h.prophyAnniversaryDefault||'');if(def){const d=new Date(def+'T00:00:00');return anniversaryForCampaignFromMonthDay(d.getMonth()+1,d.getDate())}
+  return `${campaignYears()[1]}-01-01`;
+}
+function effectiveProgrammingAnniversary(ede){const h=herdByEde(ede)||{},o=programmingOverride(ede);return dateISO(o.anniversaryDate)||defaultProgrammingAnniversary(h)}
+function programmingCountSet(ede,refDate){
+  const ref=dateISO(refDate)||effectiveProgrammingAnniversary(ede);let gt24=0,r2472=0,total=0;
+  for(const a of state.animals.filter(x=>String(x.ede)===String(ede))){
+    if(a.exitDate&&String(a.exitDate).slice(0,10)<ref)continue;
+    const m=monthsOldAt(a.birthDate,ref);if(m==null)continue;total++;
+    if(m>=24)gt24++;if(m>=24&&m<=72)r2472++;
+  }
+  const o=programmingOverride(ede);
+  if(o.gt24Count!==undefined&&o.gt24Count!==''&&Number.isFinite(Number(o.gt24Count)))gt24=Number(o.gt24Count);
+  if(o.r2472Count!==undefined&&o.r2472Count!==''&&Number.isFinite(Number(o.r2472Count)))r2472=Number(o.r2472Count);
+  return{gt24,r2472,total};
+}
+const nextProgrammingInfoBeforeV157=nextProgrammingInfo;
+nextProgrammingInfo=function(h){
+  const base=nextProgrammingInfoBeforeV157(h),o=programmingOverride(h.ede),cat=o.category||base.category;
+  const counts=programmingCountSet(h.ede,o.anniversaryDate||defaultProgrammingAnniversary(h));
+  const ann=dateISO(o.anniversaryDate)||defaultProgrammingAnniversary(h);
+  const planned=cat==='Année intermédiaire'?0:cat==='24-72 mois'?counts.r2472:cat==='>24 mois'?counts.gt24:0;
+  return{...base,category:cat,programming:o.category?`${cat} (modifié manuellement)`:base.programming,source:o.category||o.anniversaryDate||o.gt24Count!==undefined||o.r2472Count!==undefined?'Modification manuelle':base.source,anniversaryDate:ann,anniversarySource:o.anniversaryDate?'Date modifiée manuellement':(h.prophyDateSource||''),lastProphyDate:h.prophyLastDate||'',gt24Count:counts.gt24,r2472Count:counts.r2472,plannedCount:planned,vetCabinet:h.vetCabinet||h.vet||''};
+};
+function programmedAnimalCount(row){return Number(row?.plannedCount??0)||0}
+function filteredProgrammingRows(){
+  const dept=$('#progDept')?.value||'',cat=$('#progCat')?.value||'',mode=$('#progMode')?.value||'',vet=$('#progVet')?.value||'',q=norm($('#progQ')?.value||'');
+  return nextProgrammingRows().filter(r=>(!dept||String(r.dept)===dept)&&(!cat||r.category===cat)&&(!mode||norm(r.mode).includes(norm(mode)))&&(!vet||r.vetCabinet===vet)&&(!q||norm([r.ede,r.name,r.currentStatus,r.programming,r.vetCabinet].join(' ')).includes(q)));
+}
+function programmingDetailedRows(rows=filteredProgrammingRows()){
+  return rows.map(r=>({'Département':r.dept,'EDE':r.ede,'Éleveur':r.name,'Cabinet vétérinaire':r.vetCabinet,'Mode':r.mode,'Statut actuel':r.currentStatus,'Campagne préparée':nextCampaign(),'Catégorie prévue':r.category,'Date anniversaire retenue':fmtDate(r.anniversaryDate),'Source date':r.anniversarySource,'Dernière prophy / intervention':fmtDate(r.lastProphyDate),'Bovins >24 mois à la date':r.gt24Count,'Bovins 24-72 mois à la date':r.r2472Count,'Bovins estimés dans la catégorie prévue':r.plannedCount,'>40 dans la catégorie prévue':r.plannedCount>40?'Oui':'Non','Source programmation':r.source}));
+}
+function programmingTableHTML(rows){
+  if(!rows.length)return'<div class="empty">Aucun cheptel dans cette catégorie.</div>';
+  return `<div class="table-wrap"><table class="programming-table"><thead><tr><th>Dépt</th><th>EDE</th><th>Éleveur</th><th>Cabinet vétérinaire</th><th>Mode</th><th>Catégorie prévue</th><th>Date anniversaire retenue</th><th>&gt;24 mois</th><th>24-72 mois</th><th>À dépister</th><th>&gt;40 ?</th><th>Source</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.plannedCount>40?'programming-over40':''}" data-herd="${esc(r.ede)}"><td>${esc(r.dept)}</td><td><strong>${esc(r.ede)}</strong></td><td>${esc(r.name)}</td><td>${esc(r.vetCabinet||'Non renseigné')}</td><td>${badgeMode(r.mode)}</td><td><strong>${esc(r.category)}</strong><br><small>${esc(r.programming)}</small></td><td data-sort-value="${esc(r.anniversaryDate)}"><strong>${fmtDate(r.anniversaryDate)}</strong><br><small>${esc(r.anniversarySource||'')}</small></td><td><strong>${r.gt24Count}</strong></td><td><strong>${r.r2472Count}</strong></td><td><strong>${r.plannedCount}</strong></td><td>${r.plannedCount>40?`<span class="over40-badge">Oui · ${r.plannedCount}</span>`:'Non'}</td><td>${esc(r.source)}</td><td><button class="mini-btn programming-edit" data-ede="${esc(r.ede)}">Modifier</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+function programmingViewHTML(){
+  const rows=filteredProgrammingRows(),vets=[...new Set(nextProgrammingRows().map(r=>r.vetCabinet).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  return pageHead('Programmation N+1',`Préparation de la campagne ${esc(nextCampaign())} à la date anniversaire habituelle de prophylaxie`)+`<div class="card"><div class="toolbar"><input id="progQ" type="search" placeholder="EDE, éleveur, cabinet, statut…"><select id="progDept"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="progMode"><option value="">Garantie + Assainissement</option><option>Garantie</option><option>Assainissement</option></select><select id="progCat"><option value="">Toutes les programmations</option><option>Année intermédiaire</option><option>&gt;24 mois</option><option>24-72 mois</option><option>À vérifier</option></select><select id="progVet"><option value="">Tous les cabinets</option>${vets.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></div><p class="help">Pour chaque cheptel : date anniversaire retenue, effectif estimé &gt;24 mois et 24-72 mois à cette date, puis effectif de la catégorie réellement programmée. La ligne ressort uniquement si la catégorie prévue dépasse 40 bovins. Date, catégorie et effectifs restent modifiables manuellement.</p><div id="programmingTable">${programmingTableHTML(rows)}</div></div>`;
+}
+async function saveProgrammingOverride(ede,obj){const all={...programmingOverrides(),[String(ede)]:obj};await setMeta('programmingOverridesV157',all)}
+function openProgrammingEdit(ede){
+  if(!ensureWrite())return;const h=herdByEde(ede)||{},r=nextProgrammingInfo(h),o=programmingOverride(ede);
+  openModal(`<h2>Modifier la programmation N+1 — ${esc(ede)}</h2><p class="help">${esc(h.name||'')} · ${esc(h.vetCabinet||h.vet||'Cabinet non renseigné')}</p><div class="form-grid"><div class="field"><label>Catégorie prévue</label><select id="peCategory"><option ${r.category==='>24 mois'?'selected':''}>&gt;24 mois</option><option ${r.category==='24-72 mois'?'selected':''}>24-72 mois</option><option ${r.category==='Année intermédiaire'?'selected':''}>Année intermédiaire</option><option ${r.category==='À vérifier'?'selected':''}>À vérifier</option></select></div><div class="field"><label>Date anniversaire retenue</label><input id="peDate" class="short-date" value="${esc(fmtDate(r.anniversaryDate))}"><small>${esc(r.anniversarySource||'')}</small></div><div class="field"><label>Effectif &gt;24 mois</label><input id="peGt24" type="number" min="0" value="${r.gt24Count}"></div><div class="field"><label>Effectif 24-72 mois</label><input id="pe2472" type="number" min="0" value="${r.r2472Count}"></div></div><div class="actions"><button class="ghost" id="peRecalc">Recalculer les effectifs à cette date</button><button class="primary" id="peSave">Enregistrer</button><button class="ghost" id="peReset">Revenir au calcul automatique</button></div>`);
+  bindShortDateInputs($('#modalBody'));
+  $('#peRecalc').onclick=()=>{const d=dateISO($('#peDate').value);if(!d)return toast('Date invalide');const old=state.meta.programmingOverridesV157;const temp=programmingOverrides()[String(ede)]||{};const ai=state.meta.programmingOverridesV157||{};const saved={...ai};delete saved[String(ede)];state.meta.programmingOverridesV157=saved;const c=programmingCountSet(ede,d);state.meta.programmingOverridesV157=old;$('#peGt24').value=c.gt24;$('#pe2472').value=c.r2472;};
+  $('#peSave').onclick=async()=>{const d=readShortDate($('#peDate'),{required:true,label:'Date anniversaire'});if(d===null)return;const obj={category:$('#peCategory').value,anniversaryDate:d,gt24Count:num($('#peGt24').value),r2472Count:num($('#pe2472').value),updatedAt:new Date().toISOString()};await saveProgrammingOverride(ede,obj);closeModal();render();toast('Programmation mise à jour')};
+  $('#peReset').onclick=async()=>{const all={...programmingOverrides()};delete all[String(ede)];await setMeta('programmingOverridesV157',all);closeModal();render();toast('Calcul automatique rétabli')};
+}
+function exportProgrammingExcel(){const rows=programmingDetailedRows();if(!window.XLSX)return toast('Bibliothèque Excel indisponible.');const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune ligne selon les filtres'}]);XLSX.utils.book_append_sheet(wb,ws,'PROGRAMMATION_N+1');XLSX.writeFile(wb,`PTB_Programmation_N+1_${nextCampaign().replace('/','-')}.xlsx`);toast('Excel complet de programmation créé')}
+function exportProgrammingCsvFull(){const rows=programmingDetailedRows(),headers=Object.keys(rows[0]||{EDE:''});download(`PTB_Programmation_N+1_${nextCampaign().replace('/','-')}.csv`,toCSV(rows,headers),'text/csv;charset=utf-8');toast('CSV complet créé')}
+function exportProgrammingEdeCsv(){const rows=filteredProgrammingRows().map(r=>({'N° cheptel':String(r.ede||'')}));download(`PTB_Programmation_N+1_EDE_${nextCampaign().replace('/','-')}.csv`,toCSV(rows,['N° cheptel']),'text/csv;charset=utf-8');toast('CSV N° cheptel créé')}
+function safeSheetName(name,used){let s=String(name||'Sans cabinet').replace(/[\\\/\?\*\[\]\:]/g,' ').trim().slice(0,31)||'Sans cabinet',base=s,i=2;while(used.has(s)){const suf=` ${i++}`;s=base.slice(0,31-suf.length)+suf}used.add(s);return s}
+function exportOver40ByVetExcel(dept){
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible.');const rows=nextProgrammingRows().filter(r=>Number(r.dept)===Number(dept)&&r.plannedCount>40).sort((a,b)=>String(a.vetCabinet).localeCompare(String(b.vetCabinet),'fr')||String(a.name).localeCompare(String(b.name),'fr'));
+  const data=programmingDetailedRows(rows);const wb=XLSX.utils.book_new(),used=new Set();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.length?data:[{Info:'Aucun cheptel >40'}]),safeSheetName('RECAP',used));
+  const groups=new Map();for(const r of rows){const v=r.vetCabinet||'Sans cabinet';if(!groups.has(v))groups.set(v,[]);groups.get(v).push(r)}
+  for(const [vet,rr] of groups)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(programmingDetailedRows(rr)),safeSheetName(vet,used));
+  XLSX.writeFile(wb,`PTB_${dept}_cheptels_plus40_par_cabinet_${today()}.xlsx`);toast(`${rows.length} cheptel(s) >40 exporté(s) pour le ${dept}`);
+}
+function enhanceProgrammingUI(){
+  if(state.view!=='programming')return;const table=$('#programmingTable');if(!table)return;if($('#progVet'))$('#progVet').onchange=applyProgrammingFilters;
+  let panel=$('#programmingExtraTools');if(!panel){panel=document.createElement('div');panel.id='programmingExtraTools';panel.className='card programming-extra-tools';table.parentElement?.insertBefore(panel,table)}
+  panel.innerHTML=`<div class="page-head"><div><h2>Exports de programmation</h2><p class="help">Les trois premiers exports respectent les filtres affichés. Les deux derniers sortent tous les cheptels &gt;40, classés par cabinet, séparément pour chaque département.</p></div></div><div class="actions"><button class="primary" id="progExcelFull">Excel complet (sélection)</button><button class="ghost" id="progCsvFull">CSV complet (sélection)</button><button class="ghost" id="progCsvEde">CSV N° cheptel (sélection)</button><button class="ghost" id="progVet32">Excel &gt;40 par cabinet — 32</button><button class="ghost" id="progVet65">Excel &gt;40 par cabinet — 65</button></div>`;
+  $('#progExcelFull').onclick=exportProgrammingExcel;$('#progCsvFull').onclick=exportProgrammingCsvFull;$('#progCsvEde').onclick=exportProgrammingEdeCsv;$('#progVet32').onclick=()=>exportOver40ByVetExcel(32);$('#progVet65').onclick=()=>exportOver40ByVetExcel(65);
+  $$('.programming-edit',table).forEach(b=>b.onclick=e=>{e.stopPropagation();openProgrammingEdit(b.dataset.ede)});
+}
+function applyProgrammingFilters(){const box=$('#programmingTable');if(!box)return;box.innerHTML=programmingTableHTML(filteredProgrammingRows());$$('.programming-edit',box).forEach(b=>b.onclick=e=>{e.stopPropagation();openProgrammingEdit(b.dataset.ede)});enhanceProgrammingUI()}
+function memoViewHTML(){return pageHead('Mémo de travail','Comment utiliser Paratu avec AGDS au fil de la campagne',`<button class="ghost" id="printMemo">Imprimer</button>`)+`<div class="card memo-card"><h2>1. Au lancement de la campagne</h2><ol><li>Importer / actualiser les bovins 32 et 65 depuis AGDS.</li><li>Ouvrir <b>Programmation N+1</b> : vérifier la date anniversaire retenue et la catégorie prévue (&gt;24 mois ou 24-72 mois).</li><li>Contrôler les cheptels mis en évidence <b>&gt;40 bovins dans leur catégorie prévue</b>.</li><li>Si besoin, cliquer <b>Modifier</b> sur le cheptel pour corriger date, catégorie ou effectif estimé.</li><li>Exporter les listes <b>&gt;40 par cabinet</b>, séparément pour le 32 et le 65, pour organiser les prophylaxies.</li></ol></div><div class="card memo-card"><h2>2. Au quotidien — introductions et descendants</h2><ol><li>Depuis les alertes AGDS, exporter les introductions (EXCIN) et descendants de mère non négative (EXCME).</li><li>Importer ces listes dans Paratu : l’application rapproche les animaux et évite la double saisie.</li><li>Un animal déjà porteur d’un événement EXCIN/EXCME dans l’export AGDS est considéré <b>déjà traité</b>.</li><li>Dans <b>Contrôle AGDS</b>, regarder uniquement ce qui reste à vérifier ou ce qui devient clôturable.</li><li>Clôturer dans AGDS lorsqu’un animal est sorti ou lorsqu’un contrôle négatif permet de conclure.</li></ol></div><div class="card memo-card"><h2>3. Résultats de prophylaxie</h2><ol><li>Importer les résultats de laboratoire ou saisir manuellement ceux qui ne remontent pas.</li><li>Vérifier le nombre programmé et le taux de réalisation : <b>&lt;95 % ressort en rouge</b>.</li><li>Les positifs, douteux, hémolysés et ininterprétables sont suivis séparément.</li><li>Traiter les non négatifs et leurs descendants, puis mettre à jour la qualification / situation de campagne.</li></ol></div><div class="card memo-card"><h2>4. Fin / suivi de campagne</h2><ol><li>Utiliser la page <b>Campagne</b> pour voir résultats manquants, dossiers à valider et actions restantes.</li><li>Vérifier les clôtures EXCME / EXCIN uniquement lorsqu’un nouvel élément le justifie.</li><li>Utiliser les exports 32 et 65 séparément pour AGDS et les bilans.</li><li>Faire régulièrement une <b>Sauvegarde JSON</b>.</li></ol><p class="help">Principe : AGDS reste le logiciel métier ; Paratu sert de tableau de bord, de rapprochement et de mémoire de travail pour éviter les doubles saisies.</p></div>`}
+views.memo=function(){return memoViewHTML()}
+function enhanceExtraViewUI(){enhanceProgrammingUI();enhanceExportsUI();if(state.view==='memo'&&$('#printMemo'))$('#printMemo').onclick=()=>window.print()}
+
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
