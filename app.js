@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.75';
+const APP_VERSION='1.2.76';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2558,7 +2558,65 @@ async function migrateNextScreeningCoherenceV174(){
   await setMeta('nextScreeningCoherenceV174',{at:new Date().toISOString(),changed});
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+
+
+/* ===== v1.2.76 — cohérence fin N -> N+1 + affichage N en deux temps ===== */
+// IMPORTANT métier : la qualification de FIN de campagne N est la qualification
+// attribuée pour la campagne suivante. Le dépistage N+1 découle donc de cette valeur :
+// 0I = campagne intermédiaire sans dépistage ; 0N = campagne de dépistage 24-72 mois.
+nextScreeningFromEndQualification=function(agds='',sigal='',status=''){
+  const a=norm(agds),sg=norm(sigal),st=norm(status),entry=qualEntryByAgds(agds);
+  const code=norm(entry?.agdsCode||agds).replace(/\s+/g,'');
+  if(code==='0i'||a.startsWith('0i -')||sg.includes('intermediaire'))return 'Année intermédiaire';
+  if(code==='0n'||a.startsWith('0n -')||sg.includes('annee > 1')||sg.includes('annee>1'))return '24-72 mois';
+  if(['pa','ds','1','po','s1'].includes(code))return '>24 mois';
+  if(sg.includes('acquisition')||sg.includes('depistage systematique')||sg.includes('annee 1')||sg.includes('plan de maitr')||sg.includes('suspend'))return '>24 mois';
+  if(st.includes('plan de maitr')||st.includes('suspendu')||st.includes('acquisition')||st.includes('depistage systematique'))return '>24 mois';
+  return screeningCategoryValue(entry?.nextScreening||'');
+};
+
+async function migrateNextScreeningCoherenceV176(){
+  const done=await getMeta('nextScreeningCoherenceV176');if(done)return;
+  let changed=0;
+  for(const h of state.herds){
+    const c=currentCampaignRecord(h.ede)||{},end=campaignEndSituation(h,c),auto=nextScreeningFromEndQualification(end.agds,end.sigal,end.status);
+    if(auto&&auto!=='À préciser'&&h.nextScreeningManual!==true&&screeningCategoryValue(h.nextScreeningOverride)!==auto){
+      await db.put('herds',{...h,nextScreeningOverride:auto,nextScreeningManual:false,lastUpdatedAt:h.lastUpdatedAt||new Date().toISOString(),lastUpdatedReason:'N+1 remis en cohérence avec qualification fin N'});changed++;
+    }
+  }
+  if(changed)state.herds=await db.all('herds');
+  await setMeta('nextScreeningCoherenceV176',{at:new Date().toISOString(),changed});
+}
+
+const herdDetailHTML_v176=herdDetailHTML;
+herdDetailHTML=function(ede){
+  let html=herdDetailHTML_v176(ede);
+  const h=herdByEde(ede),c=currentCampaignRecord(ede)||{}; if(!h)return html;
+  const start=campaignStartSituation(h,c),end=campaignEndSituation(h,c),a=effectiveAnalysisForHerd(ede),p=managementProposal(ede,a),isGuarantee=norm(effectiveHerdMode(h,c)).includes('garantie');
+  const next=coherentNextScreeningForHerd(h,c);
+  const startStatus=start.status||'Non renseigné',endStatus=end.status||'À renseigner';
+  const situation=`<section id="situation" class="herd-section card">
+    <div class="page-head"><div><h2>Situation de campagne</h2><p>Lecture claire pour le suivi : N avant prophylaxie → N après résultats → N+1.</p></div><button class="ghost" id="btnEditHerd">Modifier la fiche</button></div>
+    ${campaignFlowHTML(ede)}
+    <div class="card" style="margin-bottom:12px"><h3>N-1 · situation précédente</h3><div class="form-grid"><div><b>Campagne</b><br>${esc(h.previousCampaign||'Non renseignée')}</div><div><b>Qualification AGDS</b><br>${esc(qualFull(h.previousAgds||'','agds')||'Non renseignée')}</div><div><b>Qualification SIGAL</b><br>${esc(qualFull(h.previousSigal||h.qualificationNational||'','sigal')||h.previousSigal||h.qualificationNational||'Non renseignée')}</div><div><b>Statut</b><br>${esc(h.previousStatus||'Non renseigné')}</div></div></div>
+    <div class="campaign-current-split">
+      <div class="card current-situation-card" style="margin-bottom:12px"><h3>N · avant prophylaxie</h3><p class="help">Situation connue au début de ${esc(start.campaign||state.campaign)}. Elle reste le point de départ de la campagne.</p><div class="form-grid"><div><b>Qualification AGDS</b><br>${esc(qualFull(start.agds,'agds')||start.agds||'Non renseignée')}</div><div><b>Qualification SIGAL</b><br>${esc(qualFull(start.sigal,'sigal')||start.sigal||'Non renseignée')}</div><div><b>Statut au début</b><br><b>${esc(startStatus)}</b></div><div><b>Campagne</b><br>${esc(start.campaign||state.campaign)}</div></div></div>
+      <div class="card end-situation-card" style="margin-bottom:12px"><h3>N · suite aux résultats / fin de campagne</h3><p class="help">Situation attribuée après traitement des résultats. <b>C'est elle qui devient le début de N+1.</b></p><div class="form-grid"><div><b>Qualification AGDS fin N</b><br>${esc(qualFull(end.agds,'agds')||end.agds||'À renseigner')}</div><div><b>Qualification SIGAL fin N</b><br>${esc(qualFull(end.sigal,'sigal')||end.sigal||'À renseigner')}</div><div><b>Statut retenu pour N+1</b><br><b>${esc(endStatus)}</b></div><div><b>Validation fin N</b><br>${end.validatedAt?fmtDate(end.validatedAt):'Non datée'}</div></div></div>
+    </div>
+    <div class="card"><h3>N+1 · suite prévue</h3><div class="form-grid"><div><b>Qualification qui servira au début de N+1</b><br>${esc(qualFull(end.agds,'agds')||end.agds||'À renseigner en fin de N')}</div><div><b>Type de dépistage N+1</b><br><strong>${esc(next)}</strong></div></div><small class="help">Calcul automatique depuis la qualification de fin de campagne N ; reste modifiable manuellement si nécessaire.</small></div>
+    <div class="field full" style="margin-top:12px"><b>Pourquoi / commentaire</b><br>${esc(h.comment||h.currentSituation||'')}</div>
+    ${statusHistoryHTML(h)}${bo2TraceHTML(h)}
+    ${Number(h.dept)===32?`<div class="reimbursement-box"><h3>Remboursement analyses - Gers (32)</h3><div class="form-grid"><div><b>Facture reçue</b><br>${esc(h.invoiceReceived||'Non')}</div><div><b>Date réception</b><br>${fmtDate(h.invoiceReceivedDate)}</div><div><b>Année de remboursement</b><br>${esc(h.reimbursementYear||'Non renseignée')} / 4</div><div><b>Date réponse compta</b><br>${fmtDate(h.accountingReplyDate)}</div></div><button class="primary" id="btnEditReimbursement" data-ede="${esc(ede)}">Saisir / modifier</button></div>`:''}
+    ${isGuarantee?`<div class="actions" style="margin:12px 0"><button class="primary" id="btnHerdAssistant">Ouvrir l’assistant référentiel</button></div>${firstIntentionHTML(ede,a,state.analysisTreatments.find(x=>x.id===key(String(ede),state.campaign))||a?.treatment||{})}${decisionHTML(p)}`:''}
+  </section>`;
+  const i=html.indexOf('<section id="situation"');
+  const j=i>=0?html.indexOf('<section id="analyses"',i):-1;
+  if(i>=0&&j>i)html=html.slice(0,i)+situation+html.slice(j);
+  return html;
+};
+/* ===== fin v1.2.76 ===== */
+
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */

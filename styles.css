@@ -77,3 +77,8 @@
 .link-button{appearance:none;border:0;background:none;padding:0;margin:0;color:inherit;font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}.link-button:hover{color:#8f1f68}
 /* v1.2.72 — lecture début / fin de campagne */
 .campaign-flow-card{border:1px solid #d7dce2;border-radius:14px;padding:14px;margin:0 0 14px;background:#f8fafc}.campaign-flow-title{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px}.campaign-flow-title>b{font-size:1.05rem}.campaign-flow-title>span{color:#5b6775;font-size:.9rem}.campaign-flow-grid{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:stretch}.campaign-flow-step{background:white;border:1px solid #dfe4ea;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:5px}.campaign-flow-step>span{font-size:.72rem;font-weight:800;color:#6d7783}.campaign-flow-step>small{color:#637083}.campaign-flow-end{border-color:#b52e78;background:#fff5fa}.campaign-flow-arrow{align-self:center;font-size:1.35rem;font-weight:800;color:#8b96a3}.end-situation-card{border:2px solid #b52e78!important;background:#fff8fc!important}@media(max-width:1000px){.campaign-flow-grid{grid-template-columns:1fr}.campaign-flow-arrow{transform:rotate(90deg);justify-self:center}}
+
+/* v1.2.76 : lecture en deux temps de la campagne N */
+.campaign-current-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.campaign-current-split>.card{height:100%}
+@media (max-width:980px){.campaign-current-split{grid-template-columns:1fr}}
