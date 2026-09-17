@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.74';
+const APP_VERSION='1.2.75';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -142,6 +142,11 @@ async function loadState(){
   if(!state.meta.currentCampaign)await setMeta('currentCampaign',state.campaign);
 }
 async function setMeta(id,value){state.meta[id]=value;await db.put('meta',{id,value})}
+async function getMeta(id){
+  if(Object.prototype.hasOwnProperty.call(state.meta,id))return state.meta[id];
+  const row=await db.get('meta',id);
+  return row?.value;
+}
 
 async function markExistingTrackingHandledByDefault(){
   // Migration unique v1.2.43 : l'utilisateur indique que ses anciennes fiches éleveur
