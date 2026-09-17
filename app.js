@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.76';
+const APP_VERSION='1.2.77';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2560,7 +2560,7 @@ async function migrateNextScreeningCoherenceV174(){
 
 
 
-/* ===== v1.2.76 — cohérence fin N -> N+1 + affichage N en deux temps ===== */
+/* ===== v1.2.77 — cohérence fin N -> N+1 + affichage N en deux temps ===== */
 // IMPORTANT métier : la qualification de FIN de campagne N est la qualification
 // attribuée pour la campagne suivante. Le dépistage N+1 découle donc de cette valeur :
 // 0I = campagne intermédiaire sans dépistage ; 0N = campagne de dépistage 24-72 mois.
@@ -2614,9 +2614,66 @@ herdDetailHTML=function(ede){
   if(i>=0&&j>i)html=html.slice(0,i)+situation+html.slice(j);
   return html;
 };
-/* ===== fin v1.2.76 ===== */
+/* ===== fin v1.2.77 ===== */
 
 async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
+
+/* ===== v1.2.77 — qualification visible dans Programmation N+1 et exports ===== */
+function programmingQualificationInfo(ede){
+  const h=herdByEde(ede)||{};
+  const c=currentCampaignRecord(ede)||{};
+  const end=campaignEndSituation(h,c)||{};
+  const agds=String(end.agds||'').trim();
+  const sigal=String(end.sigal||'').trim();
+  const status=String(end.status||'').trim();
+  return{
+    agds,
+    sigal,
+    status,
+    agdsDisplay:agds?qualFull(agds,'agds'):'À renseigner',
+    sigalDisplay:sigal?qualFull(sigal,'sigal'):'À renseigner'
+  };
+}
+
+programmingDetailedRows=function(rows=filteredProgrammingRows()){
+  return rows.map(r=>{
+    const q=programmingQualificationInfo(r.ede);
+    return{
+      'Département':r.dept,
+      'EDE':r.ede,
+      'Éleveur':r.name,
+      'Cabinet vétérinaire':r.vetCabinet,
+      'Mode':r.mode,
+      'Qualification AGDS fin N / début N+1':q.agdsDisplay,
+      'Qualification SIGAL fin N / début N+1':q.sigalDisplay,
+      'Statut retenu pour N+1':q.status||'',
+      'Campagne préparée':nextCampaign(),
+      'Catégorie prévue':r.category,
+      'Date anniversaire retenue':fmtDate(r.anniversaryDate),
+      'Source date':r.anniversarySource,
+      'Dernière prophy / intervention':fmtDate(r.lastProphyDate),
+      'Bovins >24 mois à la date':r.gt24Count,
+      'Bovins 24-72 mois à la date':r.r2472Count,
+      'Bovins estimés dans la catégorie prévue':r.plannedCount,
+      '>40 dans la catégorie prévue':r.plannedCount>40?'Oui':'Non',
+      'Source programmation':r.source
+    };
+  });
+};
+
+programmingTableHTML=function(rows){
+  if(!rows.length)return'<div class="empty">Aucun cheptel dans cette catégorie.</div>';
+  return `<div class="table-wrap"><table class="programming-table"><thead><tr><th>Dépt</th><th>EDE</th><th>Éleveur</th><th>Cabinet vétérinaire</th><th>Mode</th><th>Qualification retenue N+1</th><th>Catégorie prévue</th><th>Date anniversaire retenue</th><th>&gt;24 mois</th><th>24-72 mois</th><th>À dépister</th><th>&gt;40 ?</th><th>Source</th><th></th></tr></thead><tbody>${rows.map(r=>{const q=programmingQualificationInfo(r.ede);return `<tr class="${r.plannedCount>40?'programming-over40':''}" data-herd="${esc(r.ede)}"><td>${esc(r.dept)}</td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}"><strong>${esc(r.ede)}</strong></button></td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}">${esc(r.name)}</button></td><td>${esc(r.vetCabinet||'Non renseigné')}</td><td>${badgeMode(r.mode)}</td><td><strong>${esc(q.agdsDisplay)}</strong>${q.sigal?`<br><small>SIGAL : ${esc(q.sigalDisplay)}</small>`:''}${q.status?`<br><small>Statut : ${esc(q.status)}</small>`:''}</td><td><strong>${esc(r.category)}</strong><br><small>${esc(r.programming)}</small></td><td data-sort-value="${esc(r.anniversaryDate)}"><strong>${fmtDate(r.anniversaryDate)}</strong><br><small>${esc(r.anniversarySource||'')}</small></td><td><strong>${r.gt24Count}</strong></td><td><strong>${r.r2472Count}</strong></td><td><strong>${r.plannedCount}</strong></td><td>${r.plannedCount>40?`<span class="over40-badge">Oui · ${r.plannedCount}</span>`:'Non'}</td><td>${esc(r.source)}</td><td><button class="mini-btn programming-edit" data-ede="${esc(r.ede)}">Modifier</button></td></tr>`}).join('')}</tbody></table></div>`;
+};
+
+filteredProgrammingRows=function(){
+  const dept=$('#progDept')?.value||'',cat=$('#progCat')?.value||'',mode=$('#progMode')?.value||'',vet=$('#progVet')?.value||'',qtxt=norm($('#progQ')?.value||'');
+  return nextProgrammingRows().filter(r=>{
+    const q=programmingQualificationInfo(r.ede);
+    return (!dept||String(r.dept)===dept)&&(!cat||r.category===cat)&&(!mode||norm(r.mode).includes(norm(mode)))&&(!vet||r.vetCabinet===vet)&&(!qtxt||norm([r.ede,r.name,r.currentStatus,r.programming,r.vetCabinet,q.agdsDisplay,q.sigalDisplay,q.status].join(' ')).includes(qtxt));
+  });
+};
+/* ===== fin v1.2.77 ===== */
