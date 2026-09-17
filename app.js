@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.67';
+const APP_VERSION='1.2.68';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -1780,6 +1780,17 @@ function analysisLotCoverageHTML(lot){
   if(!planned)return '—';
   const rate=tested/planned*100,ok=coverageRequirementSatisfied(planned,tested);
   return `<div class="coverage-box ${ok?'coverage-ok':'coverage-low'}"><b>${pct1(rate)}</b><br><small>${tested} / ${planned} prévus</small>${planned<=10?`<br><small>${ok?'✓':'⚠'} 1 bovin peut manquer</small>`:''}</div>`;
+}
+
+function analysisTable(rows){
+  if(!rows||!rows.length)return '<div class="empty">Aucune analyse.</div>';
+  return `<div class="table-wrap"><table><thead><tr><th>Population prévue</th><th>Programmés</th><th>Dépistés</th><th>Réalisation</th><th>Négatifs</th><th>Positifs</th><th>Douteux</th><th>Hémolysés</th><th>Ininterprétables</th><th>Prélèvement</th><th>Dossier labo</th><th>Statut</th></tr></thead><tbody>${rows.map(r=>{
+    const ede=String(r.ede||''),campaign=r.campaign||state.campaign;
+    const planned=num(r.plannedCount ?? r.programmed ?? r.planned ?? 0),tested=num(r.tested ?? r.screened ?? 0);
+    const population=r.plannedPopulation||analysisPopulationForHerd(ede,campaign)||'À préciser';
+    const coverage=planned?analysisLotCoverageHTML({plannedCount:planned,tested}):'—';
+    return `<tr><td>${esc(population)}</td><td>${planned||'—'}</td><td>${tested}</td><td>${coverage}</td><td>${num(r.negative)}</td><td><strong>${num(r.positive)}</strong></td><td>${num(r.doubtful)}</td><td>${num(r.hemolyzed)}</td><td>${num(r.uninterpretable)}</td><td>${fmtDate(r.sampleDate||r.date)}</td><td>${esc(r.labFile||r.labDossier||'')}</td><td>${esc(r.status||'')}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
 }
 function analysisDetailForHerdHTML(ede,campaign=state.campaign){
   const manual=manualAnalysisRowsForHerd(ede,campaign);
