@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.72';
+const APP_VERSION='1.2.73';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -959,7 +959,7 @@ function bindViewLegacy(){
   if($('#btnAddAnalysisForHerd')) $('#btnAddAnalysisForHerd').onclick=()=>openAnalysisForm(state.selectedHerd);
   $$('.edit-campaign').forEach(b=>b.onclick=e=>{e.stopPropagation();openCampaignEdit(b.dataset.campaignId)});
   if($('#backToHerds')) $('#backToHerds').onclick=()=>{state.view='herds';render()};
-  if($('#saveCampaign')) $('#saveCampaign').onclick=async()=>{const v=$('#settingCampaign').value.trim();if(!/^\d{4}\/\d{4}$/.test(v))return toast('Format attendu : 2026/2027');state.campaign=v;await setMeta('currentCampaign',v);await setMeta('campaignUserSet',true);render();toast('Campagne enregistrée')};
+  if($('#saveCampaign')) $('#saveCampaign').onclick=async()=>{await changeActiveCampaign($('#settingCampaign').value.trim())};
   if($('#addQualification')) $('#addQualification').onclick=()=>openQualificationForm();
   $$('.edit-qualification').forEach(b=>b.onclick=()=>openQualificationForm(b.dataset.qid));
   if($('#addVeterinarian')) $('#addVeterinarian').onclick=()=>openVeterinarianForm();
@@ -1239,7 +1239,7 @@ function bindView(){
   if($('#btnAddAnalysisForHerd')) $('#btnAddAnalysisForHerd').onclick=()=>openAnalysisForm(state.selectedHerd);
   $$('.edit-campaign').forEach(b=>b.onclick=e=>{e.stopPropagation();openCampaignEdit(b.dataset.campaignId)});
   if($('#backToHerds')) $('#backToHerds').onclick=()=>{state.view='herds';render()};
-  if($('#saveCampaign')) $('#saveCampaign').onclick=async()=>{const v=$('#settingCampaign').value.trim();if(!/^\d{4}\/\d{4}$/.test(v))return toast('Format attendu : 2026/2027');state.campaign=v;await setMeta('currentCampaign',v);await setMeta('campaignUserSet',true);render();toast('Campagne enregistrée')};
+  if($('#saveCampaign')) $('#saveCampaign').onclick=async()=>{await changeActiveCampaign($('#settingCampaign').value.trim())};
   if($('#addQualification')) $('#addQualification').onclick=()=>openQualificationForm();
   $$('.edit-qualification').forEach(b=>b.onclick=()=>openQualificationForm(b.dataset.qid));
   if($('#addVeterinarian')) $('#addVeterinarian').onclick=()=>openVeterinarianForm();
@@ -2423,7 +2423,102 @@ const nextProgrammingInfo_v172=nextProgrammingInfo;
 nextProgrammingInfo=function(h){const r=nextProgrammingInfo_v172(h),end=campaignEndSituation(h,currentCampaignRecord(h?.ede)||{});return{...r,currentStatus:end.status||qualFull(end.agds,'agds')||r.currentStatus,mode:effectiveHerdMode(h,currentCampaignRecord(h?.ede)||{})}};
 /* ===== fin v1.2.72 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+/* ===== v1.2.73 — migration 25/26 + bascule fiable de campagne ===== */
+const campaignEndSituation_v173=campaignEndSituation;
+campaignEndSituation=function(h,c={}){
+  // À partir de v1.2.73, la fin de campagne n'est jamais déduite du statut courant.
+  // Elle n'existe que lorsqu'elle a réellement été renseignée / validée.
+  const agds=String(h?.campaignEndAgds||'').trim();
+  const sigal=String(h?.campaignEndSigal||'').trim();
+  const status=String(h?.campaignEndStatus||'').trim();
+  const campaign=String(h?.campaignEndCampaign||h?.currentStatusCampaign||state.campaign||'').trim();
+  return{agds,sigal,status,campaign,validatedAt:h?.campaignEndValidatedAt||''};
+};
+function campaignPair(c){const m=String(c||'').match(/^(\d{4})\/(\d{4})$/);return m?[Number(m[1]),Number(m[2])]:null}
+function isNextCampaign(from,to){const a=campaignPair(from),b=campaignPair(to);return !!(a&&b&&b[0]===a[0]+1&&b[1]===a[1]+1)}
+function upsertCampaignSituationHistory(h,snapshot){
+  const arr=Array.isArray(h.campaignSituationHistory)?h.campaignSituationHistory.map(x=>({...x})):[];
+  const i=arr.findIndex(x=>String(x.campaign)===String(snapshot.campaign));
+  if(i>=0)arr[i]={...arr[i],...snapshot};else arr.push(snapshot);
+  return arr;
+}
+async function applyV173Campaign2526Migration(){
+  if(state.meta.v173Campaign2526Migration==='done')return;
+  const seed=window.PTB_BUNDLED_HISTORY||null,byEde=new Map((seed?.herds||[]).map(x=>[String(x.ede),x]));
+  const updates=[];
+  for(const h of state.herds){
+    const src=byEde.get(String(h.ede))||{};
+    // Les valeurs qui étaient jusqu'ici affichées en "N" provenaient de la fin 25/26.
+    const legacyEndAgds=String(h.campaignEndAgds||h.campaignStartAgds||h.qualificationAgds||h.currentQualification||src.qualificationAgds||src.currentQualification||'').trim();
+    const legacyEndSigal=String(h.campaignEndSigal||h.campaignStartSigal||h.qualificationSigalCurrent||src.qualificationSigalCurrent||src.qualificationAfterCampaign||'').trim();
+    const legacyEndStatus=String(h.campaignEndStatus||h.campaignStartStatus||h.statusOverride||src.statusOverride||'').trim();
+    // Le début 25/26 correspond aux colonnes "qualification actuelle" avant traitement,
+    // stockées historiquement dans previousAgds / previousSigal / previousStatus.
+    const startAgds=String(src.previousAgds||h.previousAgds||'').trim();
+    const startSigal=String(src.previousSigal||h.previousSigal||'').trim();
+    const startStatus=String(src.previousStatus||h.previousStatus||mappedStatusForAgds(startAgds)||statusForQualification(startAgds,startSigal)||'').trim();
+    const snap={campaign:'2025/2026',startAgds,startSigal,startStatus,endAgds:legacyEndAgds,endSigal:legacyEndSigal,endStatus:legacyEndStatus,endValidatedAt:h.campaignEndValidatedAt||'',nextScreening:h.nextScreeningOverride||''};
+    const obj={...h,
+      campaignStartAgds:startAgds,campaignStartSigal:startSigal,campaignStartStatus:startStatus,
+      currentQualification:startAgds||h.currentQualification||'',qualificationAgds:startAgds||h.qualificationAgds||'',qualificationSigalCurrent:startSigal||h.qualificationSigalCurrent||'',
+      currentStatusCampaign:'2025/2026',
+      campaignEndAgds:legacyEndAgds,campaignEndSigal:legacyEndSigal,campaignEndStatus:legacyEndStatus,campaignEndCampaign:'2025/2026',
+      statusOverride:legacyEndStatus||h.statusOverride||'',
+      campaignSituationHistory:upsertCampaignSituationHistory(h,snap),
+      lastUpdatedReason:h.lastUpdatedReason||'Migration début/fin campagne 2025/2026'
+    };
+    updates.push(obj);
+  }
+  if(updates.length)await db.bulkPut('herds',updates);
+  await setMeta('v173Campaign2526Migration','done');
+  if(updates.length)await loadState();
+}
+async function rollCampaignForward(from,to){
+  if(!isNextCampaign(from,to))return;
+  const herdUpdates=[],campaignUpdates=[];
+  for(const h of state.herds){
+    const c=currentCampaignRecord(h.ede,from)||{};
+    const start=campaignStartSituation(h,c),end=campaignEndSituation(h,c);
+    const endAgds=end.agds||start.agds,endSigal=end.sigal||start.sigal,endStatus=end.status||start.status;
+    const nextPlanned=screeningCategoryValue(h.nextScreeningOverride||nextScreeningFromHistory(h.ede));
+    const snapshot={campaign:from,startAgds:start.agds,startSigal:start.sigal,startStatus:start.status,endAgds:end.agds,endSigal:end.sigal,endStatus:end.status,endValidatedAt:end.validatedAt||'',nextScreening:nextPlanned};
+    let mode=h.mode;
+    const joined=norm([endAgds,endSigal,endStatus].join(' '));
+    if(norm(endAgds)==='po'||norm(endAgds).startsWith('po -')||joined.includes('plan de maitr'))mode='Assainissement';
+    const obj={...h,mode,
+      previousCampaign:from,previousAgds:endAgds,previousSigal:endSigal,previousStatus:endStatus,
+      campaignStartAgds:endAgds,campaignStartSigal:endSigal,campaignStartStatus:endStatus,
+      currentQualification:endAgds,qualificationAgds:endAgds,qualificationSigalCurrent:endSigal,statusOverride:endStatus,
+      currentStatusCampaign:to,
+      campaignEndAgds:'',campaignEndSigal:'',campaignEndStatus:'',campaignEndCampaign:to,campaignEndValidatedAt:'',
+      currentCampaignScreening:nextPlanned,nextScreeningOverride:'',
+      campaignSituationHistory:upsertCampaignSituationHistory(h,snapshot),
+      lastUpdatedAt:new Date().toISOString(),lastUpdatedReason:`Bascule campagne ${from} → ${to}`
+    };
+    herdUpdates.push(obj);
+    let nc=currentCampaignRecord(h.ede,to);
+    if(nc){campaignUpdates.push({...nc,screeningPlanned:nc.screeningPlanned||nextPlanned,mode:mode||nc.mode});}
+    else campaignUpdates.push({id:key(to,h.ede),campaign:to,ede:String(h.ede),dept:h.dept,name:h.name,mode,screeningPlanned:nextPlanned,status:endStatus,protocol:h.protocol||'1 bis',comment:`Créé automatiquement lors de la bascule ${from} → ${to}`});
+  }
+  if(herdUpdates.length)await db.bulkPut('herds',herdUpdates);
+  if(campaignUpdates.length)await db.bulkPut('campaigns',campaignUpdates);
+  await setMeta('lastCampaignRollover',`${from}->${to}`);
+  await loadState();
+}
+async function changeActiveCampaign(next){
+  const v=String(next||'').trim();
+  if(!/^\d{4}\/\d{4}$/.test(v)){toast('Format attendu : 2026/2027');return false}
+  const old=state.campaign;
+  if(v===old)return true;
+  if(isNextCampaign(old,v))await rollCampaignForward(old,v);
+  state.campaign=v;await setMeta('currentCampaign',v);await setMeta('campaignUserSet',true);
+  populateCampaignSelector();render();
+  toast(isNextCampaign(old,v)?`Campagne ${v} ouverte : la fin ${old} est devenue le début ${v}`:`Campagne ${v} affichée`);
+  return true;
+}
+/* ===== fin v1.2.73 ===== */
+
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
