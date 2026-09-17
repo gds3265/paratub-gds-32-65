@@ -332,7 +332,7 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Suivi prospects/contrats envoyés en attente de retour.
 - Export de tous les animaux répertoriés pour contrôle des sorties dans AGDS.
 
-## v1.2.62 — création des collègues par l’administrateur
+## v1.2.63 — création des collègues par l’administrateur
 - Suppression de l’auto-inscription depuis Paramètres.
 - Ajout dans « Utilisateurs & droits » d’un formulaire réservé aux administrateurs pour créer un collègue avec e-mail, mot de passe initial et rôle.
 - Rôles disponibles : Consultation, Consultation + écriture, Administrateur.
