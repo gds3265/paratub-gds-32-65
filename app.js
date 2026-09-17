@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.77';
+const APP_VERSION='1.2.78';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2677,3 +2677,122 @@ filteredProgrammingRows=function(){
   });
 };
 /* ===== fin v1.2.77 ===== */
+
+
+/* ===== v1.2.78 — croisement SIGAL résultats sur intervention / AGDS analyses PTB ===== */
+function sigalInterventionImportData(){
+  const x=state.meta.sigalProphyInterventionsV178;
+  return x&&typeof x==='object'?x:{campaign:'',importedAt:'',sourceFile:'',rows:[]};
+}
+function extractEdeFromSigalRow(r){
+  for(const v of Object.values(r||{})){
+    const s=String(v??'');
+    let m=s.match(/(?:^|\b)EDE\s*[-: ]\s*(\d{8})(?:\b|$)/i);
+    if(m)return m[1];
+  }
+  return '';
+}
+async function importSigalInterventions(file){
+  const rows=await rowsFromAnyFile(file),clean=[],seen=new Set();
+  for(const r of rows){
+    const ede=extractEdeFromSigalRow(r);if(!ede)continue;
+    const keyv=[ede,String(r.ACTT_CDN||''),String(r.FICR_NOM||'')].join('|');if(seen.has(keyv))continue;seen.add(keyv);
+    clean.push({
+      ede,
+      site:String(r.RLAB_SITE_LBS||''),
+      activityId:String(r.ACTT_CDN||''),
+      sampler:String(r.LIBELLE_PRELEVEUR||''),
+      samplerId:String(r.IDENTIFIANT_PRELEVEUR||''),
+      lab:String(r.RLAB_EME_LBS||''),
+      interpretation:String(r.INTERPRETATION_LABO||r.AVE_ECHT||''),
+      sourceRef:String(r.FICR_NOM||'')
+    });
+  }
+  if(!clean.length)throw new Error('Aucun n° EDE détecté dans le fichier SIGAL. Le n° doit être présent dans un champ sous la forme EDE-XXXXXXXX.');
+  await setMeta('sigalProphyInterventionsV178',{campaign:state.campaign,importedAt:new Date().toISOString(),sourceFile:file.name,rows:clean});
+  return clean;
+}
+function hasPtbAnalysisKnownForCampaign(ede,campaign=state.campaign){
+  if(state.analysisLots.some(a=>String(a.ede)===String(ede)&&String(a.campaign)===String(campaign)))return true;
+  const c=state.campaigns.find(x=>String(x.ede)===String(ede)&&String(x.campaign)===String(campaign));
+  return !!(c&&(num(c.tested)>0||num(c.positive)>0||num(c.doubtful)>0||num(c.hemolyzed)>0||num(c.uninterpretable)>0));
+}
+function sigalInterventionForEde(ede){
+  const d=sigalInterventionImportData();if(String(d.campaign)!==String(state.campaign))return [];
+  return (d.rows||[]).filter(x=>String(x.ede)===String(ede));
+}
+function campaignEndSituationResolvedForSigalCheck(ede){
+  const h=herdByEde(ede)||{},c=state.campaigns.find(x=>String(x.ede)===String(ede)&&String(x.campaign)===String(state.campaign))||{};
+  try{
+    if(typeof campaignEndSituation==='function'){
+      const end=campaignEndSituation(h,c),start=typeof campaignStartSituation==='function'?campaignStartSituation(h,c):{};
+      if(end?.validatedAt)return true;
+      if(end?.agds&&start?.agds&&norm(end.agds)!==norm(start.agds))return true;
+      if(end?.status&&start?.status&&norm(end.status)!==norm(start.status))return true;
+    }
+  }catch(e){}
+  return false;
+}
+function sigalInterventionCrossChecks(){
+  const d=sigalInterventionImportData();if(String(d.campaign)!==String(state.campaign)||!(d.rows||[]).length)return [];
+  const eds=[...new Set((d.rows||[]).map(x=>String(x.ede)).filter(Boolean))],out=[];
+  for(const ede of eds){
+    const h=herdByEde(ede);if(!h||!isEngagedHerd(h))continue;
+    if(hasPtbAnalysisKnownForCampaign(ede,state.campaign))continue;
+    if(campaignEndSituationResolvedForSigalCheck(ede))continue;
+    const c=state.campaigns.find(x=>String(x.ede)===ede&&String(x.campaign)===String(state.campaign))||{ede,campaign:state.campaign,mode:h.mode};
+    const intermediate=isIntermediateCampaign(c,h),rr=sigalInterventionForEde(ede);
+    out.push({ede,herd:h,campaign:state.campaign,intermediate,rows:rr,
+      label:intermediate?'Prophylaxie réalisée · année intermédiaire à vérifier':'Prophylaxie réalisée · analyse PTB absente d’AGDS',
+      detail:intermediate
+        ?'SIGAL confirme que la prophylaxie générale a été réalisée. Aucun résultat PTB n’est attendu si l’année intermédiaire est correcte : vérifier le dossier puis renseigner la qualification de fin de campagne.'
+        :'SIGAL confirme que la prophylaxie générale a été réalisée, mais aucune analyse PTB n’est retrouvée dans l’import AGDS « analyses exploitation ». Vérifier si la PTB n’a pas été faite volontairement, a été oubliée, ou si le résultat ne remonte pas dans AGDS.'
+    });
+  }
+  return out;
+}
+function sigalCrossCheckForEde(ede){return sigalInterventionCrossChecks().find(x=>String(x.ede)===String(ede))||null}
+
+const handleImport_v177_sigal=handleImport;
+handleImport=async function(type,file){
+  if(type!=='sigalInterventions')return handleImport_v177_sigal(type,file);
+  if(!ensureWrite())return;
+  try{toast(`Import SIGAL de ${file.name}…`);const rows=await importSigalInterventions(file);render();toast(`${rows.length} ligne(s) SIGAL importée(s) · croisement AGDS recalculé`)}catch(e){console.error(e);toast('Erreur import SIGAL : '+e.message)}
+};
+
+const importsView_v177_sigal=views.imports;
+views.imports=function(){
+  const base=importsView_v177_sigal();
+  const d=sigalInterventionImportData(),info=(String(d.campaign)===String(state.campaign)&&d.rows?.length)?`<p class="help"><b>Dernier import :</b> ${esc(d.sourceFile||'')} · ${(d.rows||[]).length} ligne(s) · campagne ${esc(d.campaign)}.</p>`:'';
+  return base+`<div class="card"><h3>SIGAL — résultats sur intervention de prophylaxie</h3><p class="help">Cet export sert de <b>preuve que la prophylaxie générale a été réalisée</b>. Paratu extrait automatiquement le n° EDE même lorsqu’il est au milieu du libellé (ex. « EDE-65337009-Production bovine »), puis croise ces cheptels avec l’import AGDS <b>analyses exploitation PTB</b>.</p>${importCard('sigalInterventions','SIGAL — résultats sur intervention','Permet de distinguer une année intermédiaire normale d’une prophylaxie réalisée pour laquelle la PTB attendue est absente ou ne remonte pas dans AGDS.','.xlsx,.xls,.csv')}${info}</div>`;
+};
+
+const campaignAction_v177_sigal=campaignAction;
+campaignAction=function(c){
+  const base=campaignAction_v177_sigal(c),x=sigalCrossCheckForEde(c?.ede);
+  if(!x)return base;
+  if(['positive','todo','inconsistent','tracking'].includes(base.key))return base;
+  return {key:'todo',label:x.intermediate?'Prophy SIGAL faite · vérifier qualification':'Prophy SIGAL faite · PTB absente AGDS',detail:x.detail,cls:'action-warn'};
+};
+
+const priorityList_v177_sigal=priorityList;
+priorityList=function(){
+  const xs=sigalInterventionCrossChecks();
+  const extra=xs.length?`<div class="priority-list">${xs.map(x=>`<div class="priority-item"><div class="priority-bar"></div><div class="priority-body"><div class="priority-title"><span>${esc(x.herd?.name||x.ede)}</span><span class="badge ${x.intermediate?'':'red'}">${esc(x.intermediate?'Prophy faite · année intermédiaire':'PTB absente AGDS')}</span></div><div class="priority-meta">EDE ${esc(x.ede)} · prophylaxie générale retrouvée dans SIGAL · aucun résultat PTB retrouvé dans AGDS pour ${esc(state.campaign)}</div><div class="mini">${esc(x.detail)}</div></div><div class="priority-action"><button class="primary" data-herd="${esc(x.ede)}">Ouvrir</button></div></div>`).join('')}</div>`:'';
+  const base=priorityList_v177_sigal();
+  if(xs.length&&base.includes('Aucun dossier nécessitant un traitement'))return extra;
+  return extra+base;
+};
+
+views.todo=function(){
+  const all=campaignEffectiveRows().map(c=>c.analysis).filter(Boolean),oopEdes=new Set(state.herds.filter(h=>activeOutOfProphyPositive(h.ede,state.campaign)).map(h=>String(h.ede))),importOpen=new Set(all.filter(x=>!x.isHistorical&&x.status!=='TRAITÉ').map(x=>String(x.ede))),sigalOpen=new Set(sigalInterventionCrossChecks().map(x=>String(x.ede))),pos=new Set([...all.filter(x=>!x.isHistorical&&x.positive>0&&x.status!=='TRAITÉ').map(x=>String(x.ede)),...oopEdes]).size,todo=new Set([...importOpen,...oopEdes,...sigalOpen]).size,treated=all.filter(x=>x.isHistorical||x.status==='TRAITÉ').length;const histOnly=all.filter(x=>x.isHistorical).length;
+  return pageHead('À traiter',`Priorités - campagne ${esc(state.campaign)}`,`<button class="primary" data-go="imports">Importer des résultats</button>`)+`<div class="grid kpi-grid">${kpi('Résultats reçus',all.length,`${engagedHerds().length} engagés`)}${kpi('À traiter',todo,'dossiers ouverts')}${kpi('Positifs à traiter',pos,'résultats importés non clôturés')}${kpi('Traités / clôturés',treated,'validés ou repris de l’historique')}</div>${sigalOpen.size?`<div class="card"><div class="help"><b>Croisement SIGAL / AGDS :</b> ${sigalOpen.size} cheptel(s) ont une prophylaxie générale retrouvée dans SIGAL mais pas d’analyse PTB retrouvée dans AGDS. Les années intermédiaires sont signalées comme simple vérification de qualification ; les autres nécessitent de vérifier pourquoi la PTB est absente ou ne remonte pas.</div></div>`:''}${histOnly&&state.analysisLots.filter(x=>x.campaign===state.campaign).length===0?`<div class="card"><div class="help"><b>Information :</b> ${histOnly} résultat(s) sont actuellement lus depuis l’historique de campagne. Ils sont considérés comme déjà clôturés et ne rouvrent pas la file de traitement.</div></div>`:''}${motherDescendanceAlertsHTML()}<div class="card"><h2>File de traitement</h2><p class="help">Les résultats PTB à valider et les contrôles issus du croisement SIGAL / AGDS apparaissent ici.</p>${priorityList()}</div>`;
+};
+
+const memoViewHTML_v177_sigal=memoViewHTML;
+memoViewHTML=function(){
+  let html=memoViewHTML_v177_sigal();
+  html=html.replace('<div class="card memo-card"><h2>3. Résultats de prophylaxie</h2><ol><li>Dans AGDS, réaliser un export <b>« analyses exploitation »</b>, puis l\'importer dans Paratu. Saisir manuellement uniquement les analyses qui ne remontent pas dans cet export.</li>',`<div class="card memo-card"><h2>3. Résultats de prophylaxie</h2><ol><li>Depuis <b>SIGAL</b>, exporter les <b>« résultats sur intervention »</b> de prophylaxie et les importer dans Paratu : ce fichier permet de savoir quels cheptels ont réellement réalisé leur prophylaxie générale.</li><li>Dans <b>AGDS</b>, réaliser ensuite l’export <b>« analyses exploitation »</b> PTB et l’importer dans Paratu. L’application recroise automatiquement les deux sources.</li><li>Si SIGAL indique une prophylaxie réalisée mais qu’aucune PTB n’est retrouvée dans AGDS : <b>en année intermédiaire</b>, vérifier simplement le cheptel et mettre à jour la qualification de fin de campagne ; <b>si un dépistage PTB était prévu</b>, vérifier attentivement si la PTB n’a pas été faite, a été volontairement omise ou si le résultat ne remonte pas dans AGDS.</li><li>Saisir manuellement uniquement les analyses PTB qui ne remontent pas dans l’export AGDS.</li>`);
+  return html;
+};
+/* ===== fin v1.2.78 ===== */
