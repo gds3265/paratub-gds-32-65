@@ -331,3 +331,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Reprise des anciennes fiches hors listes engagées (SSCONTRAT et absentes des engagés) en fiches non engagées.
 - Suivi prospects/contrats envoyés en attente de retour.
 - Export de tous les animaux répertoriés pour contrôle des sorties dans AGDS.
+
+## v1.2.62 — création des collègues par l’administrateur
+- Suppression de l’auto-inscription depuis Paramètres.
+- Ajout dans « Utilisateurs & droits » d’un formulaire réservé aux administrateurs pour créer un collègue avec e-mail, mot de passe initial et rôle.
+- Rôles disponibles : Consultation, Consultation + écriture, Administrateur.
+- Le rôle et l’activation peuvent être modifiés ultérieurement depuis la liste des collègues.
