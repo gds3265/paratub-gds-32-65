@@ -73,3 +73,5 @@
 .programming-table small{color:#667784}
 .memo-card ol{margin:8px 0 0 22px;padding:0}.memo-card li{margin:8px 0;line-height:1.45}
 @media print{.sidebar,.topbar,#printMemo{display:none!important}.app-shell{display:block}.content{padding:0}.card{box-shadow:none;break-inside:avoid}}
+/* v1.2.70 */
+.link-button{appearance:none;border:0;background:none;padding:0;margin:0;color:inherit;font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}.link-button:hover{color:#8f1f68}

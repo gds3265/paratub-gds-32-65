@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.69';
+const APP_VERSION='1.2.70';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2270,7 +2270,68 @@ enhanceExtraViewUI=function(){
 };
 /* ===== fin v1.2.69 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+/* ===== v1.2.70 — cohérence mode / qualification + ouverture N+1 ===== */
+function effectiveHerdMode(h,c=currentCampaignRecord(h?.ede)||{}){
+  if(!h)return'';
+  if(isArchivedHerd(h))return'Sans contrat';
+  const agds=String(qualificationDisplay(h,c,'qualificationAgds')||h.qualificationAgds||h.currentQualification||'').trim();
+  const sigal=String(sigalQualificationDisplay(h,c)||h.qualificationSigalCurrent||'').trim();
+  const status=String(h.statusOverride||c?.status||c?.situation||'').trim();
+  const joined=norm([agds,sigal,status].join(' '));
+  const ae=qualEntryByAgds(agds);
+  if(norm(ae?.agdsCode)==='po' || joined.includes('plan de maitr'))return'Assainissement';
+  if(norm(agds)==='po' || norm(agds).startsWith('po -'))return'Assainissement';
+  return String(h.mode||c?.mode||'').trim()||'Garantie';
+}
+
+async function repairHerdModeConsistency(){
+  const changed=[];
+  for(const h of state.herds||[]){
+    if(isArchivedHerd(h))continue;
+    const c=currentCampaignRecord(h.ede)||{};
+    const expected=effectiveHerdMode(h,c);
+    if(expected && expected!==h.mode && expected==='Assainissement'){
+      changed.push({...h,mode:'Assainissement',lastUpdatedAt:new Date().toISOString(),lastUpdatedReason:'Mode corrigé automatiquement depuis qualification PO / plan de maîtrise'});
+    }
+  }
+  if(changed.length){await db.bulkPut('herds',changed);state.herds=await db.all('herds');}
+  return changed.length;
+}
+
+const nextProgrammingInfo_v170=nextProgrammingInfo;
+nextProgrammingInfo=function(h){const r=nextProgrammingInfo_v170(h);return {...r,mode:effectiveHerdMode(h,currentCampaignRecord(h?.ede)||{})}};
+
+const programmingTableHTML_v170=programmingTableHTML;
+programmingTableHTML=function(rows){
+  if(!rows.length)return'<div class="empty">Aucun cheptel dans cette catégorie.</div>';
+  return `<div class="table-wrap"><table class="programming-table"><thead><tr><th>Dépt</th><th>EDE</th><th>Éleveur</th><th>Cabinet vétérinaire</th><th>Mode</th><th>Catégorie prévue</th><th>Date anniversaire retenue</th><th>&gt;24 mois</th><th>24-72 mois</th><th>À dépister</th><th>&gt;40 ?</th><th>Source</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.plannedCount>40?'programming-over40':''}" data-herd="${esc(r.ede)}"><td>${esc(r.dept)}</td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}"><strong>${esc(r.ede)}</strong></button></td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}">${esc(r.name)}</button></td><td>${esc(r.vetCabinet||'Non renseigné')}</td><td>${badgeMode(r.mode)}</td><td><strong>${esc(r.category)}</strong><br><small>${esc(r.programming)}</small></td><td data-sort-value="${esc(r.anniversaryDate)}"><strong>${fmtDate(r.anniversaryDate)}</strong><br><small>${esc(r.anniversarySource||'')}</small></td><td><strong>${r.gt24Count}</strong></td><td><strong>${r.r2472Count}</strong></td><td><strong>${r.plannedCount}</strong></td><td>${r.plannedCount>40?`<span class="over40-badge">Oui · ${r.plannedCount}</span>`:'Non'}</td><td>${esc(r.source)}</td><td><button class="mini-btn programming-edit" data-ede="${esc(r.ede)}">Modifier</button></td></tr>`).join('')}</tbody></table></div>`;
+};
+
+const enhanceProgrammingUI_v170=enhanceProgrammingUI;
+enhanceProgrammingUI=function(){
+  enhanceProgrammingUI_v170();
+  if(state.view!=='programming')return;
+  const table=$('#programmingTable');if(!table)return;
+  $$('.programming-open',table).forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openHerd(b.dataset.ede)});
+  $$('tr[data-herd]',table).forEach(r=>{r.style.cursor='pointer';r.onclick=e=>{if(e.target.closest('button,select,input,a'))return;openHerd(r.dataset.herd)}});
+};
+
+const applyProgrammingFilters_v170=applyProgrammingFilters;
+applyProgrammingFilters=function(){applyProgrammingFilters_v170();enhanceProgrammingUI()};
+
+const openHerdEdit_v170=openHerdEdit;
+openHerdEdit=function(ede){
+  openHerdEdit_v170(ede);
+  const ag=$('#ehAgds'),sg=$('#ehSigal'),mode=$('#ehMode');
+  const syncMode=()=>{if(!mode)return;const a=ag?.value||'',s=sg?.value||'';if(norm(a)==='po'||norm(a).startsWith('po -')||norm(s).includes('plan maitr'))mode.value='Assainissement'};
+  if(ag){const prev=ag.onchange;ag.onchange=e=>{if(prev)prev.call(ag,e);syncMode()}}
+  if(sg){const prev=sg.onchange;sg.onchange=e=>{if(prev)prev.call(sg,e);syncMode()}}
+  syncMode();
+};
+/* ===== fin v1.2.70 ===== */
+
+
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{state.campaign=e.target.value;await setMeta('currentCampaign',state.campaign);await setMeta('campaignUserSet',true);render()};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
