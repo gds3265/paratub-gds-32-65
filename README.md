@@ -332,8 +332,15 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Suivi prospects/contrats envoyés en attente de retour.
 - Export de tous les animaux répertoriés pour contrôle des sorties dans AGDS.
 
-## v1.2.63 — création des collègues par l’administrateur
+## v1.2.64 — création des collègues par l’administrateur
 - Suppression de l’auto-inscription depuis Paramètres.
 - Ajout dans « Utilisateurs & droits » d’un formulaire réservé aux administrateurs pour créer un collègue avec e-mail, mot de passe initial et rôle.
 - Rôles disponibles : Consultation, Consultation + écriture, Administrateur.
 - Le rôle et l’activation peuvent être modifiés ultérieurement depuis la liste des collègues.
+
+
+## v1.2.64 — validation prophylaxie, droits, tolérance petits lots
+- Ajout d'un bouton **Valider la prophylaxie** directement dans la fiche, y compris en Assainissement et pour les analyses saisies manuellement. Une validation enregistrée sort le résultat de la file « à traiter ».
+- Les résultats avec positifs/douteux/hémolysés/ininterprétables ouvrent toujours l'assistant de traitement détaillé.
+- Gestion des utilisateurs retirée de Paramètres : la création et les rôles sont centralisés dans **Utilisateurs & droits**.
+- Règle de réalisation : pour **10 bovins programmés ou moins**, un bovin peut manquer sans rendre le dépistage insuffisant ; au-delà de 10, le seuil de 95 % reste appliqué.
