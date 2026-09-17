@@ -1,4 +1,4 @@
-const CACHE='ptb-gds-v1.2.57';
+const CACHE='ptb-gds-v1.2.59';
 const BASE='/paratub-gds-32-65/';
 const CORE=[
   BASE,
@@ -12,6 +12,7 @@ const CORE=[
   BASE+'apple-touch-icon.png',
   BASE+'history_seed.js',
   BASE+'v157_update.js',
+  BASE+'herd_directory_seed.js',
   BASE+'migration/history_seed.json',
   BASE+'referentiel/Referentiel_statut_favorable_v3_nov2025.pdf',
   BASE+'referentiel/Gestion_resultats_non_negatifs_v2_nov2025.pdf',

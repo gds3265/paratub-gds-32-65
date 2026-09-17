@@ -314,7 +314,7 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Date/heure de dernière mise à jour affichée sur chaque fiche éleveur et alimentée par les modifications principales.
 
 
-## v1.2.57 — programmation à la date anniversaire
+## v1.2.59 — programmation à la date anniversaire
 - Données animaux 32 et 65 actualisées avec les exports AGDS du 16/09/2026.
 - Vétérinaires sanitaires/cabinets actualisés depuis les extractions SIGAL 00002 32 et 65.
 - Programmation N+1 calculée à la date anniversaire habituelle : dernière prophylaxie PTB avec dépistage en priorité, puis dernière intervention SIGAL en secours.
@@ -323,3 +323,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Export des cheptels >40 par cabinet vétérinaire, séparément 32 et 65.
 - Ajout d'un onglet Mémo de travail imprimable.
 - Les EXCIN/EXCME 65 retrouvés dans le nouvel export AGDS sont considérés déjà traités et ne sont pas remis artificiellement dans « à vérifier ».
+
+
+## v1.2.59
+- Mémo opérationnel détaillé AGDS/Paratu.
+- Base cheptels BO2/SIGAL 32/65 embarquée pour création de fiches par n° EDE.
+- Reprise des anciennes fiches hors listes engagées (SSCONTRAT et absentes des engagés) en fiches non engagées.
+- Suivi prospects/contrats envoyés en attente de retour.
+- Export de tous les animaux répertoriés pour contrôle des sorties dans AGDS.
