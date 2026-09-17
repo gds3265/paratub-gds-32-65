@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.66';
+const APP_VERSION='1.2.67';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -864,6 +864,58 @@ const guarantee=hs.filter(h=>norm(h.mode).includes('garantie')).length,assainiss
 function balance(){const a=departmentBalance(32),b=departmentBalance(65),bounds=campaignBounds();return{campaign:state.campaign,period:bounds.label,herds:a.herds+b.herds,guarantee:a.guarantee+b.guarantee,assainissement:a.assainissement+b.assainissement,herdsTested:a.received+b.received,animalsTested:a.animalsTested+b.animalsTested,nonNegDetected:a.nonNegDetected+b.nonNegDetected,nonNegKnownMother:a.nonNegKnownMother+b.nonNegKnownMother,toTreat:a.toTreat+b.toTreat}}
 function deptBalanceHTML(dept){const b=departmentBalance(dept),due=Math.max(0,b.herds-b.intermediate),bounds=campaignBounds();return`<section class="card dept-balance"><h2>Département ${dept}</h2><p class="help"><strong>Période du bilan :</strong> ${esc(bounds.label)}</p><div class="grid kpi-grid">${kpi('Engagés',b.herds,`${b.guarantee} Garantie · ${b.assainissement} Assainissement`)}${kpi('Résultats reçus',b.received,`${b.missing} en attente sur ${due} cheptels à dépister`)}${kpi('Années intermédiaires',b.intermediate,'aucun dépistage prévu cette campagne')}${kpi('Non négatifs détectés',b.nonNegDetected,`${b.nonNegKnownMother} dont la mère était déjà connue non négative (${b.nonNegKnownMotherPct} %) · ${bounds.label}`)}</div><div class="charts charts-two"><div class="chart-card">${pie(b.guarantee,b.herds)}<div class="legend"><b>Mode de suivi</b><div class="legend-items vertical"><span><i style="background:#8e2c6d"></i>Garantie : <strong>${b.guarantee}</strong></span><span><i style="background:#e7eaec"></i>Assainissement : <strong>${b.assainissement}</strong></span></div><small>Total : ${b.herds} engagés · ${esc(bounds.label)}</small></div></div><div class="chart-card">${pie(b.received,Math.max(due,1),'#43a047','#eceff1')}<div class="legend"><b>Avancement de la campagne</b><div class="legend-items vertical"><span><i style="background:#43a047"></i>Résultats reçus : <strong>${b.received}</strong></span><span><i style="background:#eceff1;border:1px solid #cfd8dc"></i>En attente : <strong>${b.missing}</strong></span></div><small>${esc(bounds.label)} · dénominateur : ${due} cheptels devant être dépistés. ${b.intermediate} année(s) intermédiaire(s) exclue(s) du ratio.</small></div></div></div><div class="charts cause-chart-row">${exitCauseChart(dept)}${descendantExitCauseChart(dept)}</div></section>`}
 function balanceHTML(){const b=balance();return`<div class="stat-line"><span class="stat-pill">${b.herds} engagés</span><span class="stat-pill">${b.guarantee} Garantie</span><span class="stat-pill">${b.assainissement} Assainissement</span><span class="stat-pill">${b.herdsTested} dépistés</span><span class="stat-pill">${b.animalsTested} bovins analysés</span><span class="stat-pill">${b.nonNegDetected} non négatifs détectés</span><span class="stat-pill">${b.nonNegKnownMother} avec mère déjà non négative</span></div>`}
+
+
+function enhanceSortableTables(root=document){
+  const scope=root||document;
+  scope.querySelectorAll('table.sortable-table').forEach(table=>{
+    if(table.dataset.sortBound==='1') return;
+    table.dataset.sortBound='1';
+    const headers=[...table.querySelectorAll('thead th')];
+    headers.forEach((th,index)=>{
+      if(th.dataset.nosort==='1') return;
+      th.style.cursor='pointer';
+      th.addEventListener('click',()=>{
+        const tbody=table.tBodies && table.tBodies[0];
+        if(!tbody) return;
+        const current=Number(table.dataset.sortIndex);
+        const asc = current===index ? table.dataset.sortDir!=='asc' : true;
+        table.dataset.sortIndex=String(index);
+        table.dataset.sortDir=asc?'asc':'desc';
+        headers.forEach(h=>{
+          h.dataset.sortActive='0';
+          const mark=h.querySelector('.sort-mark');
+          if(mark) mark.remove();
+        });
+        th.dataset.sortActive='1';
+        const mark=document.createElement('span');
+        mark.className='sort-mark';
+        mark.textContent=asc?' ▲':' ▼';
+        th.appendChild(mark);
+        const rows=[...tbody.rows];
+        const valueOf=row=>{
+          const cell=row.cells[index];
+          if(!cell) return '';
+          const raw=(cell.dataset.sortValue ?? cell.textContent ?? '').trim();
+          const normalized=raw.replace(/\s+/g,' ').replace(',','.');
+          const num=Number(normalized);
+          if(normalized!=='' && Number.isFinite(num)) return {type:'num',value:num};
+          const iso=/^\d{4}-\d{2}-\d{2}/.test(normalized)?Date.parse(normalized):NaN;
+          if(Number.isFinite(iso)) return {type:'num',value:iso};
+          return {type:'text',value:normalized.toLocaleLowerCase('fr-FR')};
+        };
+        rows.sort((a,b)=>{
+          const va=valueOf(a), vb=valueOf(b);
+          let cmp=0;
+          if(va.type==='num' && vb.type==='num') cmp=va.value-vb.value;
+          else cmp=String(va.value).localeCompare(String(vb.value),'fr',{numeric:true,sensitivity:'base'});
+          return asc?cmp:-cmp;
+        });
+        rows.forEach(r=>tbody.appendChild(r));
+      });
+    });
+  });
+}
 
 function bindViewLegacy(){
   $$('[data-go]').forEach(b=>b.onclick=()=>{state.view=b.dataset.go;render()});
