@@ -344,3 +344,10 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Les résultats avec positifs/douteux/hémolysés/ininterprétables ouvrent toujours l'assistant de traitement détaillé.
 - Gestion des utilisateurs retirée de Paramètres : la création et les rôles sont centralisés dans **Utilisateurs & droits**.
 - Règle de réalisation : pour **10 bovins programmés ou moins**, un bovin peut manquer sans rendre le dépistage insuffisant ; au-delà de 10, le seuil de 95 % reste appliqué.
+
+
+## v1.2.79
+- Les hémolysés ne sont plus comptés dans la tuile « Non négatifs présents » ni dans les suivis ouverts.
+- Statut animal : Non négatif / Forcé négatif (clôturé), avec conservation de l'historique.
+- Un même bovin n'apparaît plus sur plusieurs lignes au fil des campagnes : les occurrences sont regroupées sur une fiche unique avec les campagnes antérieures visibles.
+- Lors d'une nouvelle saisie d'un bovin déjà connu, l'application avertit et complète l'historique sans créer de doublon.
