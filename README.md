@@ -351,3 +351,12 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Statut animal : Non négatif / Forcé négatif (clôturé), avec conservation de l'historique.
 - Un même bovin n'apparaît plus sur plusieurs lignes au fil des campagnes : les occurrences sont regroupées sur une fiche unique avec les campagnes antérieures visibles.
 - Lors d'une nouvelle saisie d'un bovin déjà connu, l'application avertit et complète l'historique sans créer de doublon.
+
+
+## v1.2.80
+- L'onglet « Programmation N+1 » devient « Programmation » et permet de choisir indépendamment la campagne à consulter/préparer.
+- La campagne choisie peut être la campagne active, une campagne historique connue ou la campagne suivante.
+- Les dates anniversaires et effectifs >24 / 24-72 sont recalculés pour la campagne sélectionnée.
+- Les corrections manuelles de programmation sont désormais enregistrées par campagne.
+- Nouveau filtre « groupe d'édition » : >24 >40, >24 ≤40, 24-72 >40, 24-72 ≤40, année intermédiaire.
+- Les exports Excel complet, CSV complet et CSV N° cheptel respectent le groupe, le département, le mode, le cabinet et la recherche affichés.

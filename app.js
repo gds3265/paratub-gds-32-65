@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.79';
+const APP_VERSION='1.2.80';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2939,3 +2939,145 @@ memoViewHTML=function(){
   return html;
 };
 /* ===== fin v1.2.79 ===== */
+
+
+/* ===== v1.2.80 — programmation par campagne choisie + groupes d'édition ===== */
+function selectedProgrammingCampaign(){
+  return String(state.programmingCampaign||state.campaign||'').trim();
+}
+function programmingCampaignOptions(){
+  const set=new Set();
+  for(const c of state.campaigns||[])if(/^\d{4}\/\d{4}$/.test(String(c.campaign||'')))set.add(String(c.campaign));
+  for(const h of state.herds||[])for(const x of (Array.isArray(h.campaignSituationHistory)?h.campaignSituationHistory:[]))if(/^\d{4}\/\d{4}$/.test(String(x.campaign||'')))set.add(String(x.campaign));
+  if(state.campaign)set.add(String(state.campaign));
+  const nx=nextCampaign(state.campaign);if(nx)set.add(nx);
+  return [...set].sort((a,b)=>String(a).localeCompare(String(b)));
+}
+function programmingOverridesByCampaign(){
+  const x=state.meta.programmingOverridesByCampaignV180;
+  return x&&typeof x==='object'?x:{};
+}
+function legacyProgrammingCampaign(){
+  const roll=String(state.meta.lastCampaignRollover||'');
+  if(roll.endsWith('->'+String(state.campaign||'')))return String(state.campaign||'');
+  return nextCampaign(state.campaign);
+}
+function programmingOverrideForCampaign(ede,campaign=selectedProgrammingCampaign()){
+  const all=programmingOverridesByCampaign(),o=all?.[campaign]?.[String(ede)];
+  if(o&&typeof o==='object')return o;
+  if(campaign===legacyProgrammingCampaign())return programmingOverride(ede)||{};
+  return {};
+}
+async function saveProgrammingOverrideForCampaign(ede,campaign,obj){
+  const all={...programmingOverridesByCampaign()},by={...(all[campaign]||{})};by[String(ede)]=obj;all[campaign]=by;await setMeta('programmingOverridesByCampaignV180',all);
+}
+async function resetProgrammingOverrideForCampaign(ede,campaign){
+  const all={...programmingOverridesByCampaign()},by={...(all[campaign]||{})};delete by[String(ede)];all[campaign]=by;await setMeta('programmingOverridesByCampaignV180',all);
+}
+function campaignYearsForProgramming(campaign){
+  const m=String(campaign||'').match(/^(\d{4})\/(\d{4})$/);return m?[Number(m[1]),Number(m[2])]:campaignYears(campaign);
+}
+function anniversaryForProgrammingCampaign(month,day,campaign){
+  const [y1,y2]=campaignYearsForProgramming(campaign),year=month>=7?y1:y2,d=new Date(year,month-1,day);return isNaN(d)?'':d.toISOString().slice(0,10);
+}
+function defaultProgrammingAnniversaryForCampaign(h,campaign){
+  if(!h)return'';const last=dateISO(h.prophyLastDate||'');
+  if(last){const d=new Date(last+'T00:00:00'),[y1,y2]=campaignYearsForProgramming(campaign),y=d.getMonth()+1>=7?y1:y2,out=new Date(y,d.getMonth(),d.getDate());if(!isNaN(out))return out.toISOString().slice(0,10)}
+  const def=dateISO(h.prophyAnniversaryDefault||'');if(def){const d=new Date(def+'T00:00:00');return anniversaryForProgrammingCampaign(d.getMonth()+1,d.getDate(),campaign)}
+  const ys=campaignYearsForProgramming(campaign);return `${ys[1]}-01-01`;
+}
+function campaignStartForProgramming(h,campaign){
+  const hist=(Array.isArray(h?.campaignSituationHistory)?h.campaignSituationHistory:[]).find(x=>String(x.campaign)===String(campaign));
+  if(hist)return{agds:String(hist.startAgds||''),sigal:String(hist.startSigal||''),status:String(hist.startStatus||''),source:'Historique campagne'};
+  if(String(h?.currentStatusCampaign||state.campaign)===String(campaign))return{agds:String(h?.campaignStartAgds||h?.qualificationAgds||h?.currentQualification||''),sigal:String(h?.campaignStartSigal||h?.qualificationSigalCurrent||''),status:String(h?.campaignStartStatus||''),source:'Début de campagne'};
+  const c=currentCampaignRecord(h?.ede,campaign)||{};
+  return{agds:String(c.qualificationAgds||c.currentQualification||''),sigal:String(c.qualificationSigal||c.qualificationNational||''),status:String(c.status||''),source:c.id?'Fiche campagne':'Non renseigné'};
+}
+function programmingQualificationForCampaign(ede,campaign=selectedProgrammingCampaign()){
+  const h=herdByEde(ede)||{};
+  if(campaign===nextCampaign(state.campaign)){
+    const end=campaignEndSituation(h,currentCampaignRecord(ede,state.campaign)||{});
+    if(end.agds||end.sigal||end.status)return{agds:end.agds||'',sigal:end.sigal||'',status:end.status||'',source:`Fin ${state.campaign}`};
+  }
+  return campaignStartForProgramming(h,campaign);
+}
+function programmingCategoryForCampaign(h,campaign=selectedProgrammingCampaign()){
+  const o=programmingOverrideForCampaign(h.ede,campaign);if(o.category)return{category:screeningCategoryValue(o.category),text:o.category,source:'Modification manuelle'};
+  const c=currentCampaignRecord(h.ede,campaign)||{};
+  let explicit='';
+  if(campaign===String(state.campaign))explicit=h.currentCampaignScreening||c.screeningPlanned||c.populationPlanned||'';
+  else if(campaign===nextCampaign(state.campaign))explicit=h.nextScreeningOverride||c.screeningPlanned||'';
+  else explicit=c.screeningPlanned||c.populationPlanned||'';
+  let cat=screeningCategoryValue(explicit);
+  if(cat!=='À préciser')return{category:cat,text:explicit||cat,source:'Programmation enregistrée'};
+  const q=programmingQualificationForCampaign(h.ede,campaign),auto=nextScreeningFromEndQualification(q.agds,q.sigal,q.status);
+  if(auto&&auto!=='À préciser')return{category:auto,text:auto,source:`Calcul depuis qualification ${campaign}`};
+  if(isAssainissement(h))return{category:'>24 mois',text:'>24 mois',source:'Règle Assainissement'};
+  return{category:'À vérifier',text:'Programmation non renseignée',source:'À compléter'};
+}
+function programmingCountSetForCampaign(ede,refDate,campaign=selectedProgrammingCampaign()){
+  const ref=dateISO(refDate)||defaultProgrammingAnniversaryForCampaign(herdByEde(ede)||{},campaign);let gt24=0,r2472=0,total=0;
+  for(const a of state.animals.filter(x=>String(x.ede)===String(ede))){if(a.exitDate&&String(a.exitDate).slice(0,10)<ref)continue;const m=monthsOldAt(a.birthDate,ref);if(m==null)continue;total++;if(m>=24)gt24++;if(m>=24&&m<=72)r2472++;}
+  const o=programmingOverrideForCampaign(ede,campaign);if(o.gt24Count!==undefined&&o.gt24Count!==''&&Number.isFinite(Number(o.gt24Count)))gt24=Number(o.gt24Count);if(o.r2472Count!==undefined&&o.r2472Count!==''&&Number.isFinite(Number(o.r2472Count)))r2472=Number(o.r2472Count);
+  return{gt24,r2472,total};
+}
+function programmingInfoForCampaign(h,campaign=selectedProgrammingCampaign()){
+  const o=programmingOverrideForCampaign(h.ede,campaign),pc=programmingCategoryForCampaign(h,campaign),ann=dateISO(o.anniversaryDate)||defaultProgrammingAnniversaryForCampaign(h,campaign),counts=programmingCountSetForCampaign(h.ede,ann,campaign),q=programmingQualificationForCampaign(h.ede,campaign);
+  const planned=pc.category==='Année intermédiaire'?0:pc.category==='24-72 mois'?counts.r2472:pc.category==='>24 mois'?counts.gt24:0;
+  const joined=norm([q.agds,q.sigal,q.status].join(' ')),mode=(norm(q.agds)==='po'||norm(q.agds).startsWith('po -')||joined.includes('plan de maitr'))?'Assainissement':(h.mode||'');
+  return{ede:String(h.ede),dept:h.dept,name:h.name||'',mode,currentStatus:q.status||qualFull(q.agds,'agds')||'',qualificationAgds:q.agds||'',qualificationSigal:q.sigal||'',qualificationSource:q.source||'',category:pc.category,programming:pc.text||pc.category,source:o.category||o.anniversaryDate||o.gt24Count!==undefined||o.r2472Count!==undefined?'Modification manuelle':pc.source,anniversaryDate:ann,anniversarySource:o.anniversaryDate?'Date modifiée manuellement':(h.prophyDateSource||'Date anniversaire de prophylaxie'),lastProphyDate:h.prophyLastDate||'',gt24Count:counts.gt24,r2472Count:counts.r2472,plannedCount:planned,vetCabinet:h.vetCabinet||h.vet||'',campaign};
+}
+nextProgrammingRows=function(){const camp=selectedProgrammingCampaign();return engagedHerds().map(h=>programmingInfoForCampaign(h,camp)).sort((a,b)=>Number(a.dept)-Number(b.dept)||a.category.localeCompare(b.category)||a.name.localeCompare(b.name))};
+function programmingGroupMatches(r,g){
+  if(!g)return true;if(g==='gt24_over40')return r.category==='>24 mois'&&r.plannedCount>40;if(g==='gt24_under40')return r.category==='>24 mois'&&r.plannedCount<=40;if(g==='2472_over40')return r.category==='24-72 mois'&&r.plannedCount>40;if(g==='2472_under40')return r.category==='24-72 mois'&&r.plannedCount<=40;if(g==='intermediate')return r.category==='Année intermédiaire';if(g==='check')return r.category==='À vérifier';return true;
+}
+filteredProgrammingRows=function(){
+  const dept=$('#progDept')?.value||'',group=$('#progGroup')?.value||'',mode=$('#progMode')?.value||'',vet=$('#progVet')?.value||'',qtxt=norm($('#progQ')?.value||'');
+  return nextProgrammingRows().filter(r=>(!dept||String(r.dept)===dept)&&programmingGroupMatches(r,group)&&(!mode||norm(r.mode).includes(norm(mode)))&&(!vet||r.vetCabinet===vet)&&(!qtxt||norm([r.ede,r.name,r.currentStatus,r.programming,r.vetCabinet,r.qualificationAgds,r.qualificationSigal].join(' ')).includes(qtxt)));
+};
+programmingDetailedRows=function(rows=filteredProgrammingRows()){
+  const camp=selectedProgrammingCampaign();return rows.map(r=>({'Département':r.dept,'EDE':r.ede,'Éleveur':r.name,'Cabinet vétérinaire':r.vetCabinet,'Mode':r.mode,'Campagne':camp,'Qualification AGDS':r.qualificationAgds?qualFull(r.qualificationAgds,'agds'):'À renseigner','Qualification SIGAL':r.qualificationSigal?qualFull(r.qualificationSigal,'sigal'):'À renseigner','Statut':r.currentStatus||'','Catégorie prévue':r.category,'Date anniversaire retenue':fmtDate(r.anniversaryDate),'Source date':r.anniversarySource,'Dernière prophy / intervention':fmtDate(r.lastProphyDate),'Bovins >24 mois à la date':r.gt24Count,'Bovins 24-72 mois à la date':r.r2472Count,'Bovins estimés dans la catégorie prévue':r.plannedCount,'>40 dans la catégorie prévue':r.plannedCount>40?'Oui':'Non','Source programmation':r.source}));
+};
+programmingTableHTML=function(rows){
+  if(!rows.length)return'<div class="empty">Aucun cheptel dans cette sélection.</div>';
+  return `<div class="table-wrap"><table class="programming-table"><thead><tr><th>Dépt</th><th>EDE</th><th>Éleveur</th><th>Cabinet vétérinaire</th><th>Mode</th><th>Qualification campagne</th><th>Catégorie prévue</th><th>Date anniversaire retenue</th><th>&gt;24 mois</th><th>24-72 mois</th><th>À dépister</th><th>&gt;40 ?</th><th>Source</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.plannedCount>40?'programming-over40':''}" data-herd="${esc(r.ede)}"><td>${esc(r.dept)}</td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}"><strong>${esc(r.ede)}</strong></button></td><td><button type="button" class="link-button programming-open" data-ede="${esc(r.ede)}">${esc(r.name)}</button></td><td>${esc(r.vetCabinet||'Non renseigné')}</td><td>${badgeMode(r.mode)}</td><td><strong>${esc(r.qualificationAgds?qualFull(r.qualificationAgds,'agds'):'À renseigner')}</strong>${r.qualificationSigal?`<br><small>SIGAL : ${esc(qualFull(r.qualificationSigal,'sigal'))}</small>`:''}${r.currentStatus?`<br><small>Statut : ${esc(r.currentStatus)}</small>`:''}</td><td><strong>${esc(r.category)}</strong><br><small>${esc(r.programming)}</small></td><td data-sort-value="${esc(r.anniversaryDate)}"><strong>${fmtDate(r.anniversaryDate)}</strong><br><small>${esc(r.anniversarySource||'')}</small></td><td><strong>${r.gt24Count}</strong></td><td><strong>${r.r2472Count}</strong></td><td><strong>${r.plannedCount}</strong></td><td>${r.plannedCount>40?`<span class="over40-badge">Oui · ${r.plannedCount}</span>`:'Non'}</td><td>${esc(r.source)}</td><td><button class="mini-btn programming-edit" data-ede="${esc(r.ede)}">Modifier</button></td></tr>`).join('')}</tbody></table></div>`;
+};
+programmingViewHTML=function(){
+  const camp=selectedProgrammingCampaign(),opts=programmingCampaignOptions(),all=nextProgrammingRows(),rows=filteredProgrammingRows(),vets=[...new Set(all.map(r=>r.vetCabinet).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  const counts={gt24o:all.filter(r=>r.category==='>24 mois'&&r.plannedCount>40).length,gt24u:all.filter(r=>r.category==='>24 mois'&&r.plannedCount<=40).length,r2472o:all.filter(r=>r.category==='24-72 mois'&&r.plannedCount>40).length,r2472u:all.filter(r=>r.category==='24-72 mois'&&r.plannedCount<=40).length,inter:all.filter(r=>r.category==='Année intermédiaire').length};
+  return pageHead('Programmation',`Estimation pour la campagne ${esc(camp)} à la date anniversaire habituelle de prophylaxie`)+`<div class="card"><div class="form-grid"><div class="field"><label>Campagne à programmer / consulter</label><select id="progCampaign">${opts.map(c=>`<option value="${esc(c)}" ${c===camp?'selected':''}>${esc(c)}${c===state.campaign?' — campagne active':''}</option>`).join('')}</select><small class="help">Ce choix est indépendant de la campagne active de l’application.</small></div></div><div class="stat-line"><span class="stat-pill"><b>${counts.gt24o}</b> &gt;24 · &gt;40</span><span class="stat-pill"><b>${counts.gt24u}</b> &gt;24 · ≤40</span><span class="stat-pill"><b>${counts.r2472o}</b> 24-72 · &gt;40</span><span class="stat-pill"><b>${counts.r2472u}</b> 24-72 · ≤40</span><span class="stat-pill"><b>${counts.inter}</b> intermédiaires</span></div></div><div class="card"><div class="toolbar"><input id="progQ" type="search" placeholder="EDE, éleveur, cabinet, qualification…"><select id="progDept"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="progMode"><option value="">Garantie + Assainissement</option><option>Garantie</option><option>Assainissement</option></select><select id="progGroup"><option value="">Tous les groupes</option><option value="gt24_over40">&gt;24 mois — &gt;40 bovins</option><option value="gt24_under40">&gt;24 mois — ≤40 bovins</option><option value="2472_over40">24-72 mois — &gt;40 bovins</option><option value="2472_under40">24-72 mois — ≤40 bovins</option><option value="intermediate">Année intermédiaire</option><option value="check">À vérifier</option></select><select id="progVet"><option value="">Tous les cabinets</option>${vets.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></div><p class="help">Choisis d’abord la campagne, puis le groupe d’édition. Les exports Excel/CSV complets reprennent exactement la sélection affichée ; le CSV N° cheptel reste à une seule colonne.</p><div id="programmingTable">${programmingTableHTML(rows)}</div></div>`;
+};
+openProgrammingEdit=function(ede){
+  if(!ensureWrite())return;const camp=selectedProgrammingCampaign(),h=herdByEde(ede)||{},r=programmingInfoForCampaign(h,camp),o=programmingOverrideForCampaign(ede,camp);
+  openModal(`<h2>Modifier la programmation ${esc(camp)} — ${esc(ede)}</h2><p class="help">${esc(h.name||'')} · ${esc(h.vetCabinet||h.vet||'Cabinet non renseigné')}</p><div class="form-grid"><div class="field"><label>Catégorie prévue</label><select id="peCategory"><option ${r.category==='>24 mois'?'selected':''}>&gt;24 mois</option><option ${r.category==='24-72 mois'?'selected':''}>24-72 mois</option><option ${r.category==='Année intermédiaire'?'selected':''}>Année intermédiaire</option><option ${r.category==='À vérifier'?'selected':''}>À vérifier</option></select></div><div class="field"><label>Date anniversaire retenue</label><input id="peDate" class="short-date" value="${esc(fmtDate(r.anniversaryDate))}"><small>${esc(r.anniversarySource||'')}</small></div><div class="field"><label>Effectif &gt;24 mois</label><input id="peGt24" type="number" min="0" value="${r.gt24Count}"></div><div class="field"><label>Effectif 24-72 mois</label><input id="pe2472" type="number" min="0" value="${r.r2472Count}"></div></div><div class="actions"><button class="ghost" id="peRecalc">Recalculer les effectifs à cette date</button><button class="primary" id="peSave">Enregistrer</button><button class="ghost" id="peReset">Revenir au calcul automatique</button></div>`);
+  bindShortDateInputs($('#modalBody'));$('#peRecalc').onclick=()=>{const d=dateISO($('#peDate').value);if(!d)return toast('Date invalide');const c=(()=>{let gt24=0,r2472=0;for(const a of state.animals.filter(x=>String(x.ede)===String(ede))){if(a.exitDate&&String(a.exitDate).slice(0,10)<d)continue;const m=monthsOldAt(a.birthDate,d);if(m==null)continue;if(m>=24)gt24++;if(m>=24&&m<=72)r2472++;}return{gt24,r2472}})();$('#peGt24').value=c.gt24;$('#pe2472').value=c.r2472;};
+  $('#peSave').onclick=async()=>{const d=readShortDate($('#peDate'),{required:true,label:'Date anniversaire'});if(d===null)return;await saveProgrammingOverrideForCampaign(ede,camp,{category:$('#peCategory').value,anniversaryDate:d,gt24Count:num($('#peGt24').value),r2472Count:num($('#pe2472').value),updatedAt:new Date().toISOString()});closeModal();render();toast(`Programmation ${camp} mise à jour`)};
+  $('#peReset').onclick=async()=>{await resetProgrammingOverrideForCampaign(ede,camp);closeModal();render();toast(`Calcul automatique ${camp} rétabli`)};
+};
+exportProgrammingExcel=function(){const camp=selectedProgrammingCampaign(),rows=programmingDetailedRows();if(!window.XLSX)return toast('Bibliothèque Excel indisponible.');const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune ligne selon les filtres'}]);XLSX.utils.book_append_sheet(wb,ws,'PROGRAMMATION');XLSX.writeFile(wb,`PTB_Programmation_${camp.replace('/','-')}.xlsx`);toast('Excel complet de programmation créé')};
+exportProgrammingCsvFull=function(){const camp=selectedProgrammingCampaign(),rows=programmingDetailedRows(),headers=Object.keys(rows[0]||{EDE:''});download(`PTB_Programmation_${camp.replace('/','-')}.csv`,toCSV(rows,headers),'text/csv;charset=utf-8');toast('CSV complet créé')};
+exportProgrammingEdeCsv=function(){const camp=selectedProgrammingCampaign(),rows=filteredProgrammingRows().map(r=>({'N° cheptel':String(r.ede||'')}));download(`PTB_Programmation_EDE_${camp.replace('/','-')}.csv`,toCSV(rows,['N° cheptel']),'text/csv;charset=utf-8');toast('CSV N° cheptel créé')};
+exportOver40ByVetExcel=function(dept){
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible.');const camp=selectedProgrammingCampaign(),rows=nextProgrammingRows().filter(r=>Number(r.dept)===Number(dept)&&r.plannedCount>40).sort((a,b)=>String(a.vetCabinet).localeCompare(String(b.vetCabinet),'fr')||String(a.name).localeCompare(String(b.name),'fr')),data=programmingDetailedRows(rows),wb=XLSX.utils.book_new(),used=new Set();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.length?data:[{Info:'Aucun cheptel >40'}]),safeSheetName('RECAP',used));const groups=new Map();for(const r of rows){const v=r.vetCabinet||'Sans cabinet';if(!groups.has(v))groups.set(v,[]);groups.get(v).push(r)}for(const [vet,rr] of groups)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(programmingDetailedRows(rr)),safeSheetName(vet,used));XLSX.writeFile(wb,`PTB_${dept}_${camp.replace('/','-')}_cheptels_plus40_par_cabinet_${today()}.xlsx`);toast(`${rows.length} cheptel(s) >40 exporté(s) pour le ${dept}`);
+};
+enhanceProgrammingUI=function(){
+  if(state.view!=='programming')return;const table=$('#programmingTable');if(!table)return;
+  if($('#progCampaign'))$('#progCampaign').onchange=e=>{state.programmingCampaign=e.target.value;render()};
+  ['#progDept','#progMode','#progGroup','#progVet'].forEach(sel=>{if($(sel))$(sel).onchange=applyProgrammingFilters});if($('#progQ'))$('#progQ').oninput=applyProgrammingFilters;
+  let panel=$('#programmingExtraTools');if(!panel){panel=document.createElement('div');panel.id='programmingExtraTools';panel.className='card programming-extra-tools';table.parentElement?.insertBefore(panel,table)}
+  panel.innerHTML=`<div class="page-head"><div><h2>Exports de programmation — ${esc(selectedProgrammingCampaign())}</h2><p class="help">Choisis le département et l’un des 5 groupes d’édition dans les filtres ci-dessus, puis exporte. Excel et CSV complets respectent exactement la sélection.</p></div></div><div class="actions"><button class="primary" id="progExcelFull">Excel complet (sélection)</button><button class="ghost" id="progCsvFull">CSV complet (sélection)</button><button class="ghost" id="progCsvEde">CSV N° cheptel (sélection)</button><button class="ghost" id="progVet32">Excel &gt;40 par cabinet — 32</button><button class="ghost" id="progVet65">Excel &gt;40 par cabinet — 65</button></div>`;
+  $('#progExcelFull').onclick=exportProgrammingExcel;$('#progCsvFull').onclick=exportProgrammingCsvFull;$('#progCsvEde').onclick=exportProgrammingEdeCsv;$('#progVet32').onclick=()=>exportOver40ByVetExcel(32);$('#progVet65').onclick=()=>exportOver40ByVetExcel(65);
+  $$('.programming-edit',table).forEach(b=>b.onclick=e=>{e.stopPropagation();openProgrammingEdit(b.dataset.ede)});$$('.programming-open',table).forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openHerd(b.dataset.ede)});$$('tr[data-herd]',table).forEach(r=>{r.style.cursor='pointer';r.onclick=e=>{if(e.target.closest('button,select,input,a'))return;openHerd(r.dataset.herd)}});
+};
+applyProgrammingFilters=function(){const box=$('#programmingTable');if(!box)return;box.innerHTML=programmingTableHTML(filteredProgrammingRows());enhanceProgrammingUI()};
+
+const memoViewHTML_v180=memoViewHTML;
+memoViewHTML=function(){
+  let html=memoViewHTML_v180();
+  html=html.replaceAll('Programmation N+1','Programmation');
+  html=html.replace('vérifier la date anniversaire retenue et la catégorie prévue (&gt;24 mois ou 24-72 mois).','choisir la <b>campagne à préparer ou consulter</b>, puis vérifier la date anniversaire retenue et la catégorie prévue (&gt;24 mois, 24-72 mois ou année intermédiaire).');
+  html=html.replace('Exporter les listes <b>&gt;40 par cabinet</b>, séparément pour le 32 et le 65, pour organiser les prophylaxies.','Pour éditer les documents, filtrer puis exporter séparément : <b>&gt;24 mois &gt;40</b>, <b>&gt;24 mois ≤40</b>, <b>24-72 mois &gt;40</b>, <b>24-72 mois ≤40</b> et <b>année intermédiaire</b>. Les exports restent séparables pour le 32 et le 65.');
+  return html;
+};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.80 ===== */
