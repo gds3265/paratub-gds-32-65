@@ -353,10 +353,16 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Lors d'une nouvelle saisie d'un bovin déjà connu, l'application avertit et complète l'historique sans créer de doublon.
 
 
-## v1.2.80
+## v1.2.81
 - L'onglet « Programmation N+1 » devient « Programmation » et permet de choisir indépendamment la campagne à consulter/préparer.
 - La campagne choisie peut être la campagne active, une campagne historique connue ou la campagne suivante.
 - Les dates anniversaires et effectifs >24 / 24-72 sont recalculés pour la campagne sélectionnée.
 - Les corrections manuelles de programmation sont désormais enregistrées par campagne.
 - Nouveau filtre « groupe d'édition » : >24 >40, >24 ≤40, 24-72 >40, 24-72 ≤40, année intermédiaire.
 - Les exports Excel complet, CSV complet et CSV N° cheptel respectent le groupe, le département, le mode, le cabinet et la recherche affichés.
+
+## v1.2.81 — règles de réalisation, analyses ponctuelles, assainissement
+- Taux de réalisation : aucune tolérance pour ≤10 bovins ; 1 bovin de tolérance de 11 à 20 ; 5 % de tolérance au-delà de 20 (arrondi au nombre inférieur).
+- La saisie manuelle d'analyse distingue désormais « Prophylaxie de cheptel » et « Hors prophylaxie ».
+- Les analyses hors prophylaxie restent visibles et modifiables sur la fiche mais ne sont pas agrégées à la prophylaxie, ne modifient pas son taux de réalisation et ne rouvrent pas la file de traitement.
+- En Assainissement, les champs propres au référentiel Garantie sont masqués dans le suivi des non négatifs : cas référentiel, PS2/recontrôle LR, conclusion LR et contrôle N+1 réglementaire.

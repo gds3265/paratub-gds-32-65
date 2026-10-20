@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.64 — PWA multi-support */
-const APP_VERSION='1.2.80';
+/* Paratuberculose GDS 32-65 v1.2.81 — PWA multi-support */
+const APP_VERSION='1.2.81';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2941,7 +2941,7 @@ memoViewHTML=function(){
 /* ===== fin v1.2.79 ===== */
 
 
-/* ===== v1.2.80 — programmation par campagne choisie + groupes d'édition ===== */
+/* ===== v1.2.81 — programmation par campagne choisie + groupes d'édition ===== */
 function selectedProgrammingCampaign(){
   return String(state.programmingCampaign||state.campaign||'').trim();
 }
@@ -3080,4 +3080,117 @@ memoViewHTML=function(){
   return html;
 };
 views.memo=function(){return memoViewHTML()};
-/* ===== fin v1.2.80 ===== */
+/* ===== fin v1.2.81 ===== */
+
+/* ===== v1.2.81 — tolérance dépistage + analyses hors prophylaxie + assainissement simplifié ===== */
+function coverageAllowedMissing(planned){
+  planned=num(planned);
+  if(planned<=0)return 0;
+  if(planned<=10)return 0;
+  if(planned<=20)return 1;
+  return Math.floor(planned*0.05);
+}
+coverageRequirementSatisfied=function(planned,tested){
+  planned=num(planned);tested=num(tested);if(planned<=0)return null;
+  return tested>=Math.max(0,planned-coverageAllowedMissing(planned));
+};
+coverageRequirementLabel=function(planned,tested){
+  planned=num(planned);tested=num(tested);if(planned<=0)return'';
+  const missing=Math.max(0,planned-tested),allowed=coverageAllowedMissing(planned),ok=coverageRequirementSatisfied(planned,tested);
+  if(planned<=10)return ok?'Aucune tolérance pour 10 bovins ou moins : tous les bovins programmés sont dépistés.':`Aucune tolérance pour 10 bovins ou moins : ${missing} bovin(s) manque(nt).`;
+  if(planned<=20)return ok?'Tolérance respectée : au maximum 1 bovin peut manquer pour un effectif de 11 à 20.':`Tolérance dépassée : ${missing} bovin(s) manque(nt), maximum autorisé 1.`;
+  return ok?`Tolérance de 5 % respectée : ${missing} bovin(s) manquant(s), maximum autorisé ${allowed}.`:`Tolérance de 5 % dépassée : ${missing} bovin(s) manquant(s), maximum autorisé ${allowed}.`;
+};
+analysisCoverageHTML=function(a){
+  const planned=num(a?.plannedCount),tested=num(a?.tested),rate=analysisCompletionRate(a);if(!planned)return'<span class="help">Non renseigné</span>';
+  const ok=coverageRequirementSatisfied(planned,tested),cls=ok?'coverage-ok':'coverage-low',neg=num(a?.negative),pos=num(a?.positive),doubt=num(a?.doubtful),hem=num(a?.hemolyzed),unint=num(a?.uninterpretable);
+  return `<div class="coverage ${cls}"><strong>${pct1(rate)}</strong><small>${tested} / ${planned} prévus</small><small>${ok?'✓':'⚠'} ${esc(coverageRequirementLabel(planned,tested))}</small><small>− ${pct1(neg/planned*100)} · + ${pct1(pos/planned*100)} · ? ${pct1(doubt/planned*100)} · H ${pct1(hem/planned*100)} · I ${pct1(unint/planned*100)}</small></div>`;
+};
+analysisLotCoverageHTML=function(lot){
+  const planned=num(lot?.plannedCount),tested=num(lot?.tested);if(!planned)return'—';
+  const rate=tested/planned*100,ok=coverageRequirementSatisfied(planned,tested);
+  return `<div class="coverage-box ${ok?'coverage-ok':'coverage-low'}"><b>${pct1(rate)}</b><br><small>${tested} / ${planned} prévus</small><br><small>${ok?'✓':'⚠'} ${esc(coverageRequirementLabel(planned,tested))}</small></div>`;
+};
+
+function isOutOfCampaignAnalysisLot(lot){
+  return lot?.isProphylaxis===false||norm(lot?.analysisContext||lot?.analysisType||'').includes('hors prophylax');
+}
+analysisAggregate=function(campaign=state.campaign){
+  const map=new Map();
+  for(const lot of state.analysisLots.filter(x=>x.campaign===campaign&&!isOutOfCampaignAnalysisLot(x))){
+    const k=String(lot.ede); if(!map.has(k))map.set(k,{ede:k,dept:lot.dept,campaign,lots:0,first:null,last:null,tested:0,positive:0,doubtful:0,hemolyzed:0,uninterpretable:0,negative:0,explicitNegative:false,plannedCount:0,plannedPopulation:'',lastUpdate:null,dossiers:[],manualIds:[],nonManualLots:0});
+    const a=map.get(k);a.lots++;if(lot.manual)a.manualIds.push(lot.id);else a.nonManualLots++;const d=lot.sampleDate?new Date(lot.sampleDate):null;if(d&&!isNaN(d)){if(!a.first||d<a.first)a.first=d;if(!a.last||d>a.last)a.last=d}
+    a.tested+=num(lot.tested);a.positive+=num(lot.positive);a.doubtful+=num(lot.doubtful);a.hemolyzed+=num(lot.hemolyzed);a.uninterpretable+=num(lot.uninterpretable);
+    if(lot.negative!==undefined&&lot.negative!==null&&lot.negative!==''){a.negative+=num(lot.negative);a.explicitNegative=true}
+    a.plannedCount=Math.max(a.plannedCount,num(lot.plannedCount));if(!a.plannedPopulation&&lot.plannedPopulation)a.plannedPopulation=lot.plannedPopulation;
+    const u=lot.lastUpdate?new Date(lot.lastUpdate):null;if(u&&!isNaN(u)&&(!a.lastUpdate||u>a.lastUpdate))a.lastUpdate=u;if(lot.labFile)a.dossiers.push(lot.labFile);
+  }
+  for(const a of map.values()){
+    if(!a.explicitNegative)a.negative=Math.max(0,a.tested-a.positive-a.doubtful-a.hemolyzed-a.uninterpretable);
+    a.completionRate=a.plannedCount>0?(a.tested/a.plannedCount*100):null;
+    const t=state.analysisTreatments.find(x=>x.id===key(a.ede,campaign));
+    const validatedAt=t?.updatedAt?new Date(t.updatedAt):(t?.treatmentDate?new Date(t.treatmentDate):null);
+    const current=validatedAt&&!isNaN(validatedAt)&&(!a.lastUpdate||validatedAt>=a.lastUpdate)&&t.qualificationUpdated&&(a.positive===0||t.positivesManaged);
+    a.status=current?'TRAITÉ':a.positive>0?'POSITIF À TRAITER':'À TRAITER';a.treatment=t||null;
+  }
+  return map;
+};
+manualAnalysisRowsForHerd=function(ede,campaign=state.campaign){
+  return state.analysisLots.filter(x=>x.manual&&!isOutOfCampaignAnalysisLot(x)&&String(x.ede)===String(ede)&&String(x.campaign)===String(campaign)).slice().sort((a,b)=>String(b.sampleDate||'').localeCompare(String(a.sampleDate||''))||String(b.id||'').localeCompare(String(a.id||'')));
+};
+function outOfCampaignAnalysisRowsForHerd(ede,campaign=state.campaign){
+  return state.analysisLots.filter(x=>x.manual&&isOutOfCampaignAnalysisLot(x)&&String(x.ede)===String(ede)&&String(x.campaign)===String(campaign)).slice().sort((a,b)=>String(b.sampleDate||'').localeCompare(String(a.sampleDate||''))||String(b.id||'').localeCompare(String(a.id||'')));
+}
+function outOfCampaignAnalysisTableHTML(ede,campaign=state.campaign){
+  const rows=outOfCampaignAnalysisRowsForHerd(ede,campaign);if(!rows.length)return'';
+  return `<div class="subsection-block" style="margin-top:16px"><h3>Analyses hors prophylaxie</h3><p class="help">Analyses ponctuelles, contrôles individuels, recontrôles ou diagnostics. Elles ne sont pas intégrées au taux de réalisation de la prophylaxie et ne rouvrent pas la file de traitement du cheptel.</p><div class="table-wrap"><table><thead><tr><th>Date</th><th>Motif</th><th>Analysés</th><th>Négatifs</th><th>Positifs</th><th>Douteux</th><th>Hémolysés</th><th>Ininterprétables</th><th>Dossier labo</th><th>Commentaire</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtDate(r.sampleDate)}</td><td>${esc(r.analysisReason||'Analyse ponctuelle')}</td><td>${num(r.tested)}</td><td>${num(r.negative)}</td><td><strong>${num(r.positive)}</strong></td><td>${num(r.doubtful)}</td><td>${num(r.hemolyzed)}</td><td>${num(r.uninterpretable)}</td><td>${esc(r.labFile||'')}</td><td>${esc(r.comment||'')}</td><td><button class="ghost analysis-edit" data-analysis-id="${esc(r.id)}">Modifier</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+analysisDetailForHerdHTML=function(ede,campaign=state.campaign){
+  const manual=manualAnalysisRowsForHerd(ede,campaign),outside=outOfCampaignAnalysisTableHTML(ede,campaign);let prophy='';
+  if(manual.length){
+    const agg=effectiveAnalysisForHerd(ede,campaign);prophy=`<div class="table-wrap"><table><thead><tr><th>Population prévue</th><th>Programmés</th><th>Dépistés</th><th>Réalisation</th><th>Négatifs</th><th>Positifs</th><th>Douteux</th><th>Hémolysés</th><th>Ininterprétables</th><th>Prélèvement</th><th>Dossier labo</th><th></th></tr></thead><tbody>${manual.map(r=>`<tr><td>${esc(r.plannedPopulation||analysisPopulationForHerd(ede,campaign)||'À préciser')}</td><td>${num(r.plannedCount)||'—'}</td><td>${num(r.tested)}</td><td>${analysisLotCoverageHTML(r)}</td><td>${num(r.negative)}</td><td><strong>${num(r.positive)}</strong></td><td>${num(r.doubtful)}</td><td>${num(r.hemolyzed)}</td><td>${num(r.uninterpretable)}</td><td>${fmtDate(r.sampleDate)}</td><td>${esc(r.labFile||'')}</td><td><button class="ghost analysis-edit" data-analysis-id="${esc(r.id)}">Modifier</button></td></tr>`).join('')}</tbody></table></div><div class="actions" style="margin-top:12px"><button class="primary analysis-treat" data-ede="${esc(ede)}">${agg?.status==='TRAITÉ'?'Prophylaxie validée ✓':(num(agg?.positive)>0||num(agg?.doubtful)>0||num(agg?.hemolyzed)>0||num(agg?.uninterpretable)>0?'Traiter la prophylaxie':'Valider la prophylaxie')}</button></div>`;
+  }else{
+    const a=effectiveAnalysisForHerd(ede,campaign);prophy=a?analysisTable([a]):'<div class="empty">Aucun résultat de prophylaxie enregistré pour cette campagne.</div>';
+  }
+  return prophy+outside;
+};
+
+openAnalysisValidation=function(ede){
+  if(!ensureWrite())return;const a=effectiveAnalysisForHerd(ede);if(!a)return toast('Aucune prophylaxie à valider');const hasSpecial=num(a.positive)>0||num(a.doubtful)>0||num(a.hemolyzed)>0||num(a.uninterpretable)>0;if(hasSpecial)return openTreatment(ede);
+  const t=state.analysisTreatments.find(x=>x.id===key(String(ede),state.campaign))||a?.treatment||{},planned=num(a.plannedCount),tested=num(a.tested),ok=coverageRequirementSatisfied(planned,tested);
+  openModal(`<h2>Valider la prophylaxie — ${esc(herdByEde(ede)?.name||ede)}</h2><p><b>${tested}</b> bovin(s) dépisté(s) sur <b>${planned||'—'}</b> programmé(s) · ${planned?pct1(tested/planned*100):'taux non calculable'}</p>${planned?`<div class="notice ${ok?'':'warning'}">${esc(coverageRequirementLabel(planned,tested))}</div>`:''}${planned&&!ok?`<div class="notice warning">Tu peux enregistrer la vérification, mais la campagne restera signalée comme incomplète dans l’aide à la décision.</div>`:''}<div class="form-grid"><div class="field"><label>Date de validation</label><input id="qvDate" class="short-date" value="${esc(shortDateValue(t.treatmentDate||today()))}" placeholder="JJMMAA"></div><div class="field"><label>Situation / qualification vérifiée et mise à jour ?</label><select id="qvQual"><option value="true" ${t.qualificationUpdated===false?'':'selected'}>Oui</option><option value="false" ${t.qualificationUpdated===false?'selected':''}>Non</option></select></div><div class="field full"><label>Commentaire</label><textarea id="qvComment">${esc(t.comment||'')}</textarea></div></div><div class="actions"><button class="primary" id="saveQuickValidation">Valider / clôturer la prophylaxie</button></div>`);
+  bindShortDateInputs($('#modalBody'));
+  $('#saveQuickValidation').onclick=async()=>{const treatmentDate=readShortDate('#qvDate',{required:true,label:'Date de validation'});if(treatmentDate===null)return;const qualificationUpdated=$('#qvQual').value==='true';if(!qualificationUpdated)return toast('Pour sortir la prophylaxie de « à traiter », confirme que la situation / qualification a été vérifiée et mise à jour.');const obj={...t,id:key(String(ede),state.campaign),ede:String(ede),campaign:state.campaign,treatmentDate,qualificationUpdated:true,positivesManaged:true,comment:$('#qvComment').value.trim(),updatedAt:new Date().toISOString()};await db.put('analysisTreatments',obj);state.analysisTreatments=await db.all('analysisTreatments');await touchHerd(ede,'Prophylaxie validée');closeModal();render();toast('Prophylaxie validée : elle ne doit plus apparaître à traiter')};
+};
+
+openAnalysisForm=function(defaultEde='',editId=''){
+  if(!ensureWrite())return;const old=editId?state.analysisLots.find(x=>String(x.id)===String(editId)&&x.manual):null,ede0=old?.ede||defaultEde,camp0=old?.campaign||state.campaign,h=herdByEde(ede0)||{},c=currentCampaignRecord(ede0,camp0)||{},outside=old?isOutOfCampaignAnalysisLot(old):false,pop=old?.plannedPopulation||analysisPopulationForHerd(ede0,camp0);
+  openModal(`<h2>${old?'Modifier':'Saisir'} une analyse manuellement</h2><p class="help">Choisis s’il s’agit de la prophylaxie de cheptel ou d’une analyse ponctuelle hors prophylaxie. Les analyses hors prophylaxie restent dans la fiche mais ne comptent ni dans le taux de réalisation ni dans la file de traitement de la prophylaxie.</p><div class="form-grid"><div class="field"><label>Type d’analyse</label><select id="maContext"><option value="Prophylaxie de cheptel" ${outside?'':'selected'}>Prophylaxie de cheptel</option><option value="Hors prophylaxie" ${outside?'selected':''}>Hors prophylaxie</option></select></div><div class="field" id="maReasonField"><label>Motif hors prophylaxie</label><select id="maReason"><option ${old?.analysisReason==='Contrôle individuel'?'selected':''}>Contrôle individuel</option><option ${old?.analysisReason==='Recontrôle'?'selected':''}>Recontrôle</option><option ${old?.analysisReason==='Introduction'?'selected':''}>Introduction</option><option ${old?.analysisReason==='Diagnostic / clinique'?'selected':''}>Diagnostic / clinique</option><option ${old?.analysisReason==='Autre'?'selected':''}>Autre</option></select></div><div class="field"><label>EDE</label><input id="maEde" value="${esc(ede0)}"></div><div class="field"><label>Campagne de classement</label><input id="maCamp" value="${esc(camp0)}"><small class="help">Même une analyse hors prophylaxie est classée dans la campagne correspondant à sa date.</small></div><div class="field ma-prophy-field"><label>Population prévue</label><select id="maPopulation"><option ${pop==='>24 mois'?'selected':''}>&gt;24 mois</option><option ${pop==='24-72 mois'?'selected':''}>24-72 mois</option><option ${!['>24 mois','24-72 mois'].includes(pop)?'selected':''}>À préciser</option></select></div><div class="field ma-prophy-field"><label>Nb bovins programmés</label><input id="maPlanned" type="number" min="0" value="${esc(old?.plannedCount??c.plannedCount??'')}"></div><div class="field"><label>Date prélèvement</label><input id="maDate" class="short-date" value="${esc(shortDateValue(old?.sampleDate||today()))}" placeholder="JJMMAA"></div><div class="field"><label>Nb analysés / dépistés</label><input id="maTested" type="number" min="0" value="${esc(old?.tested??'')}"></div><div class="field"><label>Nb positifs</label><input id="maPos" type="number" min="0" value="${esc(old?.positive??0)}"></div><div class="field"><label>Nb douteux</label><input id="maDoubt" type="number" min="0" value="${esc(old?.doubtful??0)}"></div><div class="field"><label>Nb hémolysés</label><input id="maHemolyzed" type="number" min="0" value="${esc(old?.hemolyzed??0)}"></div><div class="field"><label>Nb ininterprétables</label><input id="maUninterpretable" type="number" min="0" value="${esc(old?.uninterpretable??0)}"></div><div class="field"><label>Nb négatifs (calculé)</label><input id="maNeg" readonly value="${esc(old?.negative??0)}"></div><div class="field ma-prophy-field"><label>Taux de réalisation</label><div id="maCoverage" class="coverage-preview">—</div></div><div class="field"><label>Dossier laboratoire</label><input id="maLab" value="${esc(old?.labFile||'')}"></div><div class="field full"><label>Commentaire</label><textarea id="maComment">${esc(old?.comment||'')}</textarea></div></div><div class="actions"><button class="primary" id="saveManualAnalysis">${old?'Enregistrer les modifications':'Enregistrer'}</button>${old?'<button class="danger" id="deleteManualAnalysis">Supprimer cette analyse</button>':''}</div>`);
+  bindShortDateInputs($('#modalBody'));
+  const refresh=()=>{const tested=num($('#maTested').value),pos=num($('#maPos').value),doubt=num($('#maDoubt').value),hem=num($('#maHemolyzed').value),unint=num($('#maUninterpretable').value),planned=num($('#maPlanned').value),neg=Math.max(0,tested-pos-doubt-hem-unint);$('#maNeg').value=neg;const isOutside=$('#maContext').value==='Hors prophylaxie';$$('.ma-prophy-field',$('#modalBody')).forEach(el=>el.style.display=isOutside?'none':'');$('#maReasonField').style.display=isOutside?'':'none';if(!isOutside){const rate=planned>0?tested/planned*100:null,ok=coverageRequirementSatisfied(planned,tested);$('#maCoverage').innerHTML=rate===null?'—':`<span class="${ok?'coverage-ok-text':'coverage-low-text'}"><b>${pct1(rate)}</b> · ${tested}/${planned}</span><small> ${ok?'✓':'⚠'} ${esc(coverageRequirementLabel(planned,tested))}</small>`}};
+  ['#maTested','#maPos','#maDoubt','#maHemolyzed','#maUninterpretable','#maPlanned'].forEach(s=>$(s).oninput=refresh);$('#maContext').onchange=refresh;refresh();
+  $('#saveManualAnalysis').onclick=async()=>{const ede=digits($('#maEde').value),sampleDate=readShortDate('#maDate',{required:true,label:'Date prélèvement'}),tested=num($('#maTested').value),positive=num($('#maPos').value),doubtful=num($('#maDoubt').value),hemolyzed=num($('#maHemolyzed').value),uninterpretable=num($('#maUninterpretable').value),outside=$('#maContext').value==='Hors prophylaxie',plannedCount=outside?0:num($('#maPlanned').value),plannedPopulation=outside?'':$('#maPopulation').value;if(sampleDate===null)return;const campaign=$('#maCamp').value.trim()||campaignFromDate(sampleDate);if(!ede||!campaign||!sampleDate)return toast('EDE, campagne et date obligatoires');if(positive+doubtful+hemolyzed+uninterpretable>tested)return toast('La somme positifs + douteux + hémolysés + ininterprétables ne peut pas dépasser le nombre analysé');const negative=Math.max(0,tested-positive-doubtful-hemolyzed-uninterpretable),hh=herdByEde(ede)||h,obj={...(old||{}),id:old?.id||key('manual',ede,campaign,sampleDate,Date.now()),dept:Number(hh.dept||ede.slice(0,2)),ede,campaign,sampleDate,tested,positive,doubtful,hemolyzed,uninterpretable,negative,plannedCount,plannedPopulation,animalsConcerned:tested,lastUpdate:new Date().toISOString(),labFile:$('#maLab').value.trim(),manual:true,analysisContext:outside?'Hors prophylaxie':'Prophylaxie de cheptel',analysisReason:outside?$('#maReason').value:'',isProphylaxis:!outside,comment:$('#maComment').value.trim()};await db.put('analysisLots',obj);state.analysisLots=await db.all('analysisLots');await touchHerd(ede,old?'Analyse manuelle modifiée':(outside?'Analyse hors prophylaxie saisie':'Analyse manuelle de prophylaxie saisie'));closeModal();render();toast(outside?(old?'Analyse hors prophylaxie modifiée':'Analyse hors prophylaxie enregistrée'):(plannedCount>0&&!coverageRequirementSatisfied(plannedCount,tested)?(old?'Analyse modifiée · attention : tolérance de réalisation dépassée':'Analyse enregistrée · attention : tolérance de réalisation dépassée'):(old?'Analyse modifiée':'Analyse manuelle enregistrée')))};
+  if(old&&$('#deleteManualAnalysis'))$('#deleteManualAnalysis').onclick=async()=>{if(!confirm('Supprimer cette analyse ?'))return;await db.delete('analysisLots',old.id);state.analysisLots=await db.all('analysisLots');await touchHerd(old.ede,'Analyse manuelle supprimée');closeModal();render();toast('Analyse supprimée')};
+};
+
+const nonNegTableForHerd_v181_base=nonNegTableForHerd;
+nonNegTableForHerd=function(rows){
+  const ede=String(rows?.[0]?.ede||state.selectedHerd||''),h=herdByEde(ede)||{};if(!isAssainissement(h))return nonNegTableForHerd_v181_base(rows);
+  if(!rows.length)return'<div class="empty">Aucun non négatif enregistré.</div>';const ai=animalIndex();
+  return `<div class="table-tools"><span class="help">Assainissement : suivi opérationnel des bovins. Les champs propres au référentiel Garantie (cas référentiel, LR, recontrôle réglementaire) sont masqués.</span><button type="button" class="mini-btn herd-table-reset" data-table-reset="nonneg">Tout afficher</button></div><div class="table-wrap"><table class="sortable-table" data-table-kind="nonneg"><thead><tr><th>Animal</th><th>Campagnes non négatives</th><th>Statut animal</th><th>Dernière campagne</th><th>Contexte</th><th>Résultat</th><th>Date</th><th>PCR</th><th>Réforme</th><th>Présence</th><th>Sortie</th><th>Commentaire</th><th></th></tr></thead><tbody>${rows.map(n=>{const a=ai.get(String(n.animalId)),e=effectiveAnimalData(n),ctx=isOutOfProphy(n)?'Hors prophylaxie':(n.resultContext||'Prophylaxie'),res=n.result||(n.pcrResult?`PCR ${n.pcrResult}`:''),status=nonNegativeStatusValue(n),hist=nonNegativeHistoryCampaigns(n);return `<tr class="click-row nn-edit ${e.presence==='Présent'?'':'animal-exited-row'} ${isForcedNegativeNonNegative(n)?'animal-forced-negative-row':''}" data-nn-id="${esc(n.id)}" data-presence="${e.presence==='Présent'?'present':'sorti'}" data-open="${nonNegativeOpen(n)?'1':'0'}"><td><strong>${esc(n.animalId)}</strong><br><small>${esc(a?.name||n.name||'')} ${a?.workNo?`(${esc(a.workNo)})`:''}</small></td><td>${hist.length>1?`<span class="warning-badge">${esc(hist.join(' · '))}</span>`:esc(hist[0]||n.campaign||'')}</td><td><select class="nn-status-inline" data-nn-status-id="${esc(n.id)}"><option value="Non négatif" ${status==='Non négatif'?'selected':''}>Non négatif</option><option value="Forcé négatif" ${status==='Forcé négatif'?'selected':''}>Forcé négatif / clôturé</option>${status==='Hémolysé'?'<option value="Hémolysé" selected>Hémolysé — non comptabilisé</option>':''}</select></td><td>${esc(n.campaign||'')}</td><td>${esc(ctx)}</td><td>${esc(res)}</td><td>${fmtDate(n.date)}</td><td>${esc(n.pcrResult||'')}</td><td>${esc(n.reformStatus||'')}</td><td>${esc(e.presence)}</td><td>${fmtDate(e.exitDate)}</td><td>${esc(n.comment||'')}</td><td><button class="mini-btn nn-edit" data-nn-id="${esc(n.id)}">Modifier</button></td></tr>`}).join('')}</tbody></table></div>`;
+};
+
+const openNNForm_v181_base=openNNForm;
+openNNForm=function(defaultEde='',editId=''){
+  openNNForm_v181_base(defaultEde,editId);
+  const old=editId?state.nonnegatives.find(x=>String(x.id)===String(editId)):null,ede=old?.ede||defaultEde,h=herdByEde(ede)||{};if(!isAssainissement(h))return;
+  ['#nnPS2','#nnFollowup','#nnConclusion','#nnReferenceCase','#nnDecision','#nnN1'].forEach(sel=>{const el=$(sel);if(el?.closest('.field'))el.closest('.field').style.display='none'});
+  const grid=$('#modalBody .form-grid');if(grid){const note=document.createElement('div');note.className='notice';note.style.gridColumn='1 / -1';note.innerHTML='<b>Cheptel en Assainissement :</b> les champs liés au référentiel Garantie (cas référentiel, recontrôle/LR et contrôle N+1 réglementaire) sont masqués. Les anciennes valeurs restent conservées en historique.';grid.prepend(note)}
+};
+
+const memoViewHTML_v181_base=memoViewHTML;
+memoViewHTML=function(){
+  return memoViewHTML_v181_base()+`<div class="card"><h2>Règles de réalisation et analyses ponctuelles</h2><ol><li><b>Taux de réalisation :</b> aucune tolérance si l’effectif prévu est ≤10 ; tolérance de 1 bovin entre 11 et 20 ; au-delà de 20, tolérance de 5 % de l’effectif prévu (arrondie au nombre inférieur).</li><li><b>Analyse hors prophylaxie :</b> dans la fiche éleveur → Analyses → Saisir une analyse → choisir « Hors prophylaxie ». Elle reste tracée dans la campagne mais ne compte pas dans la réalisation de la prophylaxie et ne crée pas de dossier « à traiter » de prophylaxie.</li><li><b>Assainissement :</b> le suivi animal est simplifié ; les champs propres au référentiel Garantie sont masqués.</li></ol></div>`;
+};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.81 ===== */
