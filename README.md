@@ -391,3 +391,10 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - PS2 à suivre au moins 9 mois après PS1 si le bovin provient d’un cheptel non Garantie / sans statut.
 - Ajout du statut de provenance, dates/résultats PS1 et PS2 dans la fiche introduction, avec alerte visuelle.
 - Le récapitulatif de rapprochement met en évidence les échéances PS1 / PS2 et les origines à qualifier.
+
+
+## v1.2.86 — suivi centralisé PS1 / PS2 des introductions
+- Les introductions déjà importées sont recalculées automatiquement : pas besoin de refaire l’import.
+- Dans Contrôle AGDS, un cadre unique permet de gérer le statut de provenance, PS1, besoin de PS2, échéance PS2 = PS1 + 9 mois, PS2 et les résultats.
+- PS2 peut être calculée automatiquement depuis le statut de provenance ou forcée Oui/Non.
+- Filtres PS1 à faire, PS2 à faire, origine à qualifier et export Excel du suivi complet.

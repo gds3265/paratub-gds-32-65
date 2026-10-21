@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.85 — PWA multi-support */
-const APP_VERSION='1.2.85';
+/* Paratuberculose GDS 32-65 v1.2.86 — PWA multi-support */
+const APP_VERSION='1.2.86';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2768,7 +2768,7 @@ enhanceExtraViewUI=function(){
 };
 /* ===== fin v1.2.79 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
@@ -3540,3 +3540,175 @@ const memoViewHTML_v185_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v185_base()+`<div class="card"><h2>Contrôles après introduction — règle septembre 2026</h2><ol><li><b>PS1 :</b> tout bovin introduit doit être contrôlé en sérologie dès qu’il atteint 18 mois, quelle que soit la qualification du cheptel de provenance.</li><li><b>Introduit avant 18 mois :</b> Paratu calcule automatiquement la date des 18 mois et signale l’échéance.</li><li><b>PS2 :</b> si le bovin provient d’un cheptel non Garantie / sans statut, prévoir une seconde prise de sang au moins 9 mois après PS1.</li><li>Le récapitulatif Excel du rapprochement des introductions contient l’âge à l’introduction, la classe &lt;18 / ≥18 mois, les échéances PS1/PS2 et une alerte de suivi.</li></ol></div>`};
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.85 ===== */
+
+
+/* ===== v1.2.86 — gestion centralisée PS1 / PS2 des introductions ===== */
+const introFollowupInfo_v185_base=introFollowupInfo_v185;
+introFollowupInfo_v185=function(i){
+  const base=introFollowupInfo_v185_base(i),ov=String(i?.ps2RequiredOverride||'').trim();
+  const ps2Required=ov==='Oui'?true:ov==='Non'?false:base.originGuarantee===false;
+  const ps2RequiredLabel=ov?`${ov} (manuel)`:(base.originGuarantee===null?'À vérifier':(ps2Required?'Oui':'Non'));
+  const ps2Due=ps2Required&&base.ps1Date?addMonths(base.ps1Date,9):'';
+  const exit=effectiveAnimalData(i||{}).exitDate||i?.exitDate||'',now=today();
+  const alerts=[];
+  let actionable=false;
+  if(base.originGuarantee===null&&!ov){alerts.push('Origine à qualifier');actionable=true;}
+  if(!base.ps1Date){
+    if(base.ps1Due&&exit&&String(exit)<String(base.ps1Due))alerts.push('Sorti avant échéance PS1');
+    else if(base.ps1Due&&String(now)>=String(base.ps1Due)){alerts.push('PS1 à faire');actionable=true;}
+    else if(base.ps1Due)alerts.push(`PS1 à partir du ${fmtDate(base.ps1Due)}`);
+    else {alerts.push('Naissance à renseigner pour calculer PS1');actionable=true;}
+  }else if(!base.ps1Result){alerts.push('PS1 faite · résultat à renseigner');actionable=true;}
+  if(ps2Required&&!base.ps2Date){
+    if(ps2Due&&exit&&String(exit)<String(ps2Due))alerts.push('Sorti avant échéance PS2');
+    else if(ps2Due&&String(now)>=String(ps2Due)){alerts.push('PS2 à faire');actionable=true;}
+    else if(ps2Due)alerts.push(`PS2 à partir du ${fmtDate(ps2Due)}`);
+    else {alerts.push('PS2 requise · renseigner PS1 pour calculer +9 mois');actionable=true;}
+  }else if(ps2Required&&base.ps2Date&&!base.ps2Result){alerts.push('PS2 faite · résultat à renseigner');actionable=true;}
+  if(!alerts.length)alerts.push(ps2Required?'PS1 + PS2 renseignées':'PS1 renseignée · pas de PS2 requise');
+  return{...base,ps2Required,ps2RequiredLabel,ps2Due,controlLabel:alerts.join(' · '),actionable,ps2Override:ov};
+};
+
+async function migrateIntroFollowupV186(force=false){
+  if(!force&&state.meta?.introFollowupMigrationV186)return;
+  const ai=animalIndex(),updates=[];
+  for(const i of state.introductions){
+    let obj=i,changed=false;
+    const a=ai.get(String(i.animalId||''));
+    if(!i.birthDate&&a?.birthDate){obj={...obj,birthDate:a.birthDate};changed=true;}
+    if(!obj.originStatus){
+      const originEde=digits(obj.origin||obj.originEde||'');
+      const h=originEde?herdByEde(originEde):null;
+      if(h){
+        const txt=norm(`${h.mode||''} ${h.currentQualification||''} ${h.statusOverride||''}`);
+        const status=(txt.includes('garantie')||txt.includes('favorable a')||txt.includes('favorable b'))?'Garantie / favorable':((txt.includes('assain')||txt.includes('plan de maitrise')||txt.includes('sscontrat'))?'Non Garantie / sans statut':'');
+        if(status){obj={...obj,originStatus:status};changed=true;}
+      }
+    }
+    if(changed)updates.push(obj);
+  }
+  if(updates.length){await db.bulkPut('introductions',updates);state.introductions=await db.all('introductions');}
+  await setMeta('introFollowupMigrationV186',{date:new Date().toISOString(),updated:updates.length});
+}
+
+function introControlCategory_v186(i){
+  const f=introFollowupInfo_v185(i),now=today(),exit=effectiveAnimalData(i).exitDate||'';
+  if(f.originGuarantee===null&&!f.ps2Override)return'origin';
+  if(!f.ps1Date&&f.ps1Due&&(!exit||String(exit)>=String(f.ps1Due))&&String(now)>=String(f.ps1Due))return'ps1';
+  if(f.ps2Required&&!f.ps2Date&&f.ps2Due&&(!exit||String(exit)>=String(f.ps2Due))&&String(now)>=String(f.ps2Due))return'ps2';
+  if(f.ps2Required&&!f.ps2Date)return'ps2future';
+  if(!f.ps1Date)return'ps1future';
+  return'done';
+}
+function introPs2OverrideOptions_v186(v){const s=String(v||'');return `<option value="" ${!s?'selected':''}>Auto</option><option value="Oui" ${s==='Oui'?'selected':''}>Oui</option><option value="Non" ${s==='Non'?'selected':''}>Non</option>`}
+function introStatusOptions_v186(v){return introOriginOptions_v185(v)}
+function introControlRows_v186(){
+  return state.introductions.map(i=>({i,h:herdByEde(i.ede)||{},f:introFollowupInfo_v185(i),cat:introControlCategory_v186(i)}));
+}
+function introControlPanel_v186(){
+  const all=introControlRows_v186(),action=all.filter(x=>x.f.actionable),ps1=all.filter(x=>x.cat==='ps1'),ps2=all.filter(x=>x.cat==='ps2'),origin=all.filter(x=>x.cat==='origin');
+  const shown=action.slice(0,500);
+  const body=shown.map(({i,h,f,cat})=>`<tr class="intro-control-row" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-intro-action="${f.actionable?'1':'0'}">
+    <td>${esc(i.ede||'')}<div class="help">${esc(h.name||'')}</div></td>
+    <td><strong>${esc(i.animalId||'')}</strong></td>
+    <td>${fmtDate(i.entryDate||i.introductionDate)}<div class="help">${esc(f.ageClass)} · 18 mois ${fmtDate(f.date18m)}</div></td>
+    <td>${esc(i.origin||'')}<select class="intro-central-field" data-field="originStatus">${introStatusOptions_v186(i.originStatus||'')}</select></td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps1Date" value="${esc(shortDateValue(f.ps1Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps1Result" value="${esc(f.ps1Result||'')}" placeholder="résultat"></td>
+    <td><select class="intro-central-field" data-field="ps2RequiredOverride">${introPs2OverrideOptions_v186(i.ps2RequiredOverride||'')}</select><div class="help">Calcul : ${esc(f.ps2RequiredLabel)}</div></td>
+    <td class="intro-ps2-due">${fmtDate(f.ps2Due)}${f.ps2Required&&!f.ps2Due?'<div class="help">PS1 nécessaire</div>':''}</td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps2Date" value="${esc(shortDateValue(f.ps2Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps2Result" value="${esc(f.ps2Result||'')}" placeholder="résultat"></td>
+    <td class="intro-control-alert"><span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span></td>
+  </tr>`).join('');
+  return `<div class="card" id="introControlPanel"><div class="page-head"><div><h2>Contrôles après introduction — gestion centralisée</h2><p>Les introductions déjà importées sont reprises automatiquement : pas besoin de refaire l’import. Tu peux renseigner ici le statut de provenance, PS1, le besoin de PS2 et PS2 sans ouvrir les fiches éleveur.</p></div><div class="actions"><button class="ghost" id="refreshIntroFollowup">Recalculer les introductions existantes</button><button class="primary" id="exportIntroFollowup">Exporter le suivi Excel</button></div></div>
+  <div class="grid kpi-grid"><button class="campaign-kpi intro-followup-kpi" data-intro-filter="action"><span>À compléter / contrôler</span><strong>${action.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps1"><span>PS1 à faire</span><strong>${ps1.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps2"><span>PS2 à faire</span><strong>${ps2.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="origin"><span>Origine à qualifier</span><strong>${origin.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="all"><span>Toutes introductions</span><strong>${all.length}</strong></button></div>
+  <div class="table-tools"><select id="introFollowupFilter"><option value="action">À compléter / contrôler</option><option value="ps1">PS1 à faire maintenant</option><option value="ps2">PS2 à faire maintenant</option><option value="origin">Origine à qualifier</option><option value="all">Toutes les introductions</option></select><span class="help">Les modifications sont enregistrées directement depuis cette ligne. « PS2 requise » peut rester sur Auto ou être forcée à Oui/Non.</span></div>
+  <div class="table-wrap"><table><thead><tr><th>EDE / éleveur</th><th>Bovin</th><th>Introduction / âge</th><th>Provenance / statut</th><th>PS1</th><th>PS2 requise</th><th>PS2 à partir du</th><th>PS2</th><th>Alerte</th></tr></thead><tbody id="introFollowupBody">${body||'<tr><td colspan="9">Aucun contrôle d’introduction à compléter.</td></tr>'}</tbody></table></div>${action.length>500?`<p class="help">${action.length-500} autre(s) introduction(s) sont incluses dans l’export Excel. Utilise les filtres pour cibler le travail.</p>`:''}</div>`;
+}
+
+async function saveIntroCentralRow_v186(el){
+  if(!ensureWrite())return;
+  const tr=el.closest('tr[data-intro-id]'),id=tr?.dataset.introId;if(!id)return;
+  const idx=state.introductions.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
+  let obj={...state.introductions[idx]};
+  const field=el.dataset.field,val=el.value;
+  if(field==='ps1Date'||field==='ps2Date'){
+    const iso=dateISO(val);if(val.trim()&&!iso){toast('Date invalide : utiliser JJMMAA ou JJ/MM/AA');return;}obj[field]=iso||'';
+  }else obj[field]=val;
+  if(field==='ps1Result')obj.serology=val;
+  await db.put('introductions',obj);state.introductions[idx]=obj;await touchHerd(obj.ede,'Suivi PS1 / PS2 introduction mis à jour');
+  const f=introFollowupInfo_v185(obj),cat=introControlCategory_v186(obj);tr.dataset.introCat=cat;tr.dataset.introAction=f.actionable?'1':'0';
+  const due=tr.querySelector('.intro-ps2-due');if(due)due.innerHTML=`${fmtDate(f.ps2Due)}${f.ps2Required&&!f.ps2Due?'<div class="help">PS1 nécessaire</div>':''}`;
+  const alert=tr.querySelector('.intro-control-alert');if(alert)alert.innerHTML=`<span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span>`;
+  toast('Suivi introduction enregistré');
+}
+function applyIntroFollowupFilter_v186(value){
+  const f=value||'action';
+  $$('#introFollowupBody tr.intro-control-row').forEach(tr=>{let show=f==='all'||(f==='action'&&tr.dataset.introAction==='1')||tr.dataset.introCat===f;tr.style.display=show?'':'none'});
+}
+function exportIntroFollowup_v186(){
+  const rows=introControlRows_v186().map(({i,h,f,cat})=>({
+    'Département':h.dept||i.dept||'','EDE':i.ede,'Éleveur':h.name||'','N° bovin':i.animalId,'Date introduction':fmtDate(i.entryDate||i.introductionDate),'Date naissance':fmtDate(f.birth),'Âge à introduction (mois)':f.ageMonths??'','Classe âge':f.ageClass,'18 mois le':fmtDate(f.date18m),'Cheptel provenance':i.origin||'','Statut provenance':f.originLabel,'Date PS1':fmtDate(f.ps1Date),'Résultat PS1':f.ps1Result||'','PS2 requise':f.ps2Required?'Oui':'Non','Mode PS2':i.ps2RequiredOverride||'Auto','PS2 à partir du':fmtDate(f.ps2Due),'Date PS2':fmtDate(f.ps2Date),'Résultat PS2':f.ps2Result||'','Alerte / action':f.controlLabel,'Catégorie':cat
+  }));
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune introduction'}]);XLSX.utils.book_append_sheet(wb,ws,'SUIVI_INTRODUCTIONS');XLSX.writeFile(wb,`PTB_suivi_introductions_PS1_PS2_${today()}.xlsx`);toast('Suivi introductions exporté');
+}
+
+const agdsControlView_v186_base=views.agdsControl;
+views.agdsControl=function(){return agdsControlView_v186_base()+introControlPanel_v186()};
+const bindView_v186_base=bindView;
+bindView=function(){
+  bindView_v186_base();
+  if(state.view==='agdsControl'){
+    bindShortDateInputs($('#introControlPanel'));
+    $$('.intro-central-field').forEach(el=>el.onchange=()=>saveIntroCentralRow_v186(el));
+    if($('#introFollowupFilter'))$('#introFollowupFilter').onchange=e=>applyIntroFollowupFilter_v186(e.target.value);
+    $$('.intro-followup-kpi').forEach(b=>b.onclick=()=>{const s=$('#introFollowupFilter');if(s){s.value=b.dataset.introFilter||'action';applyIntroFollowupFilter_v186(s.value)}});
+    if($('#exportIntroFollowup'))$('#exportIntroFollowup').onclick=exportIntroFollowup_v186;
+    if($('#refreshIntroFollowup'))$('#refreshIntroFollowup').onclick=async()=>{await migrateIntroFollowupV186(true);render();toast('Introductions existantes recalculées à partir des données déjà présentes')};
+  }
+};
+
+const memoViewHTML_v186_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v186_base()+`<div class="card"><h2>Suivi centralisé des introductions</h2><ol><li>Après un import, il n’est pas nécessaire de rouvrir les fiches éleveur : aller dans <b>Contrôle AGDS</b>, cadre <b>Contrôles après introduction</b>.</li><li>Les introductions déjà présentes sont recalculées avec la date de naissance connue dans la base animaux.</li><li>Renseigner directement sur la ligne le <b>statut de provenance</b>, PS1, puis laisser <b>PS2 requise = Auto</b> ou forcer Oui/Non si nécessaire.</li><li>Paratu calcule automatiquement l’échéance <b>PS2 = PS1 + 9 mois</b> et met en évidence PS1/PS2 à faire.</li></ol></div>`};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.86 ===== */
+
+/* v1.2.86 hotfix — chargement à la demande des listes d'introductions pour préserver les performances */
+function introControlRowHTML_v186(x){
+  const {i,h,f,cat}=x;
+  return `<tr class="intro-control-row" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-intro-action="${f.actionable?'1':'0'}">
+    <td>${esc(i.ede||'')}<div class="help">${esc(h.name||'')}</div></td><td><strong>${esc(i.animalId||'')}</strong></td>
+    <td>${fmtDate(i.entryDate||i.introductionDate)}<div class="help">${esc(f.ageClass)} · 18 mois ${fmtDate(f.date18m)}</div></td>
+    <td>${esc(i.origin||'')}<select class="intro-central-field" data-field="originStatus">${introStatusOptions_v186(i.originStatus||'')}</select></td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps1Date" value="${esc(shortDateValue(f.ps1Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps1Result" value="${esc(f.ps1Result||'')}" placeholder="résultat"></td>
+    <td><select class="intro-central-field" data-field="ps2RequiredOverride">${introPs2OverrideOptions_v186(i.ps2RequiredOverride||'')}</select><div class="help">Calcul : ${esc(f.ps2RequiredLabel)}</div></td>
+    <td class="intro-ps2-due">${fmtDate(f.ps2Due)}${f.ps2Required&&!f.ps2Due?'<div class="help">PS1 nécessaire</div>':''}</td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps2Date" value="${esc(shortDateValue(f.ps2Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps2Result" value="${esc(f.ps2Result||'')}" placeholder="résultat"></td>
+    <td class="intro-control-alert"><span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span></td></tr>`;
+}
+function bindIntroCentralFields_v186(){
+  const body=$('#introFollowupBody');if(!body)return;bindShortDateInputs(body);$$('.intro-central-field',body).forEach(el=>el.onchange=()=>saveIntroCentralRow_v186(el));
+}
+applyIntroFollowupFilter_v186=function(value){
+  const f=value||'action',all=introControlRows_v186();
+  let selected=f==='all'?all:f==='action'?all.filter(x=>x.f.actionable):all.filter(x=>x.cat===f);
+  const tbody=$('#introFollowupBody');if(!tbody)return;
+  const cap=f==='all'?1000:500,visible=selected.slice(0,cap);
+  tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v186).join(''):'<tr><td colspan="9">Aucune introduction dans ce filtre.</td></tr>';
+  bindIntroCentralFields_v186();
+  const old=$('#introFollowupLimitNote');if(old)old.remove();
+  if(selected.length>cap){const p=document.createElement('p');p.id='introFollowupLimitNote';p.className='help';p.textContent=`${selected.length-cap} ligne(s) supplémentaires ne sont pas affichées pour préserver les performances ; elles restent incluses dans l’export Excel.`;$('#introControlPanel')?.appendChild(p);}
+};
+const introControlPanel_v186_fast=introControlPanel_v186;
+introControlPanel_v186=function(){
+  const html=introControlPanel_v186_fast();
+  return html;
+};
+const bindView_v186_fast=bindView;
+bindView=function(){
+  bindView_v186_fast();
+  if(state.view==='agdsControl'){
+    // Le panneau est rendu par défaut uniquement avec les éléments à compléter.
+    applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'action');
+  }
+};
