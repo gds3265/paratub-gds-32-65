@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.81 — PWA multi-support */
-const APP_VERSION='1.2.81';
+/* Paratuberculose GDS 32-65 v1.2.82 — PWA multi-support */
+const APP_VERSION='1.2.82';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -3194,3 +3194,83 @@ memoViewHTML=function(){
 };
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.81 ===== */
+
+/* ===== v1.2.82 — exports bovins séparés 32 / 65 pour AGDS ===== */
+function engagedAnimalRowsForDept(dept,{presentOnly=true}={}){
+  dept=Number(dept);
+  const herds=engagedHerds().filter(h=>Number(h.dept)===dept),edes=new Set(herds.map(h=>String(h.ede))),seen=new Set();
+  return state.animals
+    .filter(a=>edes.has(String(a.ede))&&(!presentOnly||effectiveAnimalData(a).presence==='Présent'))
+    .filter(a=>{const id=String(a.animalId||'').trim();if(!id||seen.has(id))return false;seen.add(id);return true})
+    .map(a=>{const e=effectiveAnimalData(a),h=herdByEde(a.ede)||{};return{
+      'Département':dept,
+      'EDE':String(a.ede||''),
+      'Éleveur':h.name||'',
+      'N° bovin':String(a.animalId||''),
+      'N° travail':a.workNo||'',
+      'Nom':a.name||'',
+      'Sexe':a.sex||'',
+      'Date naissance':fmtDate(a.birthDate),
+      'Présence':e.presence||a.presence||'',
+      'Date sortie':fmtDate(e.exitDate||a.exitDate),
+      'Cause sortie':a.exitCause||'',
+      'N° mère':a.motherId||''
+    }});
+}
+function trackedAnimalRowsForDept(dept){
+  dept=Number(dept);
+  const edes=new Set(engagedHerds().filter(h=>Number(h.dept)===dept).map(h=>String(h.ede)));
+  return allTrackedAnimalRows().filter(r=>String(r.EDE||'').split('/').map(x=>x.trim()).some(e=>edes.has(e)));
+}
+function exportEngagedAnimalsExcel(dept){
+  const rows=engagedAnimalRowsForDept(dept,{presentOnly:true});
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun bovin présent pour les engagés de ce département'}]);
+  XLSX.utils.book_append_sheet(wb,ws,`BOVINS_ENGAGES_${dept}`);
+  XLSX.writeFile(wb,`PTB_bovins_presents_engages_${dept}_${today()}.xlsx`);
+  toast(`${rows.length} bovin(s) du ${dept} exporté(s)`);
+}
+function exportEngagedAnimalNumbersCsv(dept){
+  const rows=engagedAnimalRowsForDept(dept,{presentOnly:true}).map(r=>({'N° bovin':r['N° bovin']}));
+  download(`PTB_bovins_presents_engages_${dept}_NUMEROS_${today()}.csv`,toCSV(rows,['N° bovin']),'text/csv;charset=utf-8');
+  toast(`${rows.length} n° bovin du ${dept} exporté(s)`);
+}
+function exportTrackedAnimalsDeptExcel(dept){
+  const rows=trackedAnimalRowsForDept(dept);
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun animal répertorié pour les engagés de ce département'}]);
+  XLSX.utils.book_append_sheet(wb,ws,`ANIMAUX_REPERTORIES_${dept}`);
+  XLSX.writeFile(wb,`PTB_animaux_repertories_engages_${dept}_${today()}.xlsx`);
+  toast(`${rows.length} animal(aux) répertorié(s) du ${dept} exporté(s)`);
+}
+function exportTrackedAnimalNumbersDeptCsv(dept){
+  const rows=trackedAnimalRowsForDept(dept).map(r=>({'N° bovin':r['N° bovin']}));
+  download(`PTB_animaux_repertories_engages_${dept}_NUMEROS_${today()}.csv`,toCSV(rows,['N° bovin']),'text/csv;charset=utf-8');
+  toast(`${rows.length} n° bovin répertorié(s) du ${dept} exporté(s)`);
+}
+function animalDeptExportRow(label,dept,kind='present'){
+  const n=kind==='tracked'?trackedAnimalRowsForDept(dept).length:engagedAnimalRowsForDept(dept,{presentOnly:true}).length;
+  return `<tr><td><strong>${esc(label)}</strong></td><td>${n}</td><td><button class="ghost animal-dept-excel" data-dept="${dept}" data-kind="${kind}">Excel complet</button></td><td><button class="ghost animal-dept-csv" data-dept="${dept}" data-kind="${kind}">CSV N° bovin</button></td></tr>`;
+}
+views.exports=function(){return pageHead('Exports','Exports toujours séparés par département pour AGDS')+
+`<div class="card"><h2>Listes de cheptels engagés</h2><p class="help">Travail séparé 32 / 65. Excel complet = toutes les colonnes disponibles. CSV N° cheptel = une seule colonne pour AGDS.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Nombre</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${herdExportRow('Tous les engagés 32','engages32')}${herdExportRow('Tous les engagés 65','engages65')}${herdExportRow('Garantie 32','garantie32')}${herdExportRow('Garantie 65','garantie65')}${herdExportRow('Assainissement 32','ass32')}${herdExportRow('Assainissement 65','ass65')}</tbody></table></div></div>`+
+`<div class="card"><h2>Bovins des cheptels engagés — AGDS</h2><p class="help">Les bovins sont volontairement séparés par département. Le CSV AGDS contient <b>une seule colonne : N° bovin</b>.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Nombre</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${animalDeptExportRow('Bovins présents des engagés 32',32,'present')}${animalDeptExportRow('Bovins présents des engagés 65',65,'present')}${animalDeptExportRow('Tous animaux répertoriés des engagés 32',32,'tracked')}${animalDeptExportRow('Tous animaux répertoriés des engagés 65',65,'tracked')}</tbody></table></div><p class="help">« Tous animaux répertoriés » regroupe la base animaux, les non négatifs, descendants et introductions connus. Utile pour réinterroger AGDS et récupérer les sorties récentes.</p></div>`+
+`<div class="card"><h2>Autres exports de suivi</h2><div class="actions"><button class="ghost export-btn" data-export="nonnegpresent">Non négatifs présents</button><button class="ghost export-btn" data-export="descendants">Descendants</button><button class="ghost export-btn" data-export="introducedAnimals">Bovins introduits</button></div></div>`+
+`<div class="card"><h2>Suivi campagne</h2><div class="actions"><button class="ghost export-btn" data-export="positifs">Cheptels positifs</button><button class="ghost export-btn" data-export="campaignFollowup">Suivi de tous les engagés</button><button class="ghost export-btn" data-export="introductions">Introductions</button></div></div>`+
+`<div class="card"><h2>Sauvegarde complète Excel</h2><button class="primary" id="exportFullExcel">Exporter toute la base en Excel</button></div>`;};
+
+const bindView_v182_base=bindView;
+bindView=function(){
+  bindView_v182_base();
+  if(state.view==='exports'){
+    $$('.animal-dept-excel').forEach(b=>b.onclick=()=>{const dept=Number(b.dataset.dept),kind=b.dataset.kind;kind==='tracked'?exportTrackedAnimalsDeptExcel(dept):exportEngagedAnimalsExcel(dept)});
+    $$('.animal-dept-csv').forEach(b=>b.onclick=()=>{const dept=Number(b.dataset.dept),kind=b.dataset.kind;kind==='tracked'?exportTrackedAnimalNumbersDeptCsv(dept):exportEngagedAnimalNumbersCsv(dept)});
+  }
+};
+
+const memoViewHTML_v182_base=memoViewHTML;
+memoViewHTML=function(){
+  return memoViewHTML_v182_base()+`<div class="card"><h2>Exports bovins vers AGDS</h2><ol><li>Dans <b>Exports</b>, toujours travailler département par département : <b>Bovins des engagés 32</b> ou <b>Bovins des engagés 65</b>.</li><li>Pour remettre directement une liste de bovins dans AGDS, utiliser <b>CSV N° bovin</b> : le fichier contient une seule colonne avec les identifiants bovins.</li><li>L’Excel complet est conservé pour le contrôle de travail ; « Tous animaux répertoriés » permet notamment de réinterroger AGDS sur les animaux déjà connus de Paratu et de mettre à jour les sorties.</li></ol></div>`;
+};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.82 ===== */

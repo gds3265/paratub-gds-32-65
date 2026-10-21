@@ -366,3 +366,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - La saisie manuelle d'analyse distingue désormais « Prophylaxie de cheptel » et « Hors prophylaxie ».
 - Les analyses hors prophylaxie restent visibles et modifiables sur la fiche mais ne sont pas agrégées à la prophylaxie, ne modifient pas son taux de réalisation et ne rouvrent pas la file de traitement.
 - En Assainissement, les champs propres au référentiel Garantie sont masqués dans le suivi des non négatifs : cas référentiel, PS2/recontrôle LR, conclusion LR et contrôle N+1 réglementaire.
+
+
+## v1.2.82 — exports bovins séparés 32 / 65
+- Exports AGDS bovins toujours séparés par département.
+- Bovins présents des engagés 32 et bovins présents des engagés 65.
+- Pour chaque département : Excel complet + CSV contenant uniquement la colonne N° bovin.
+- Les exports « tous animaux répertoriés » sont également séparés 32 / 65.
+- Mémo de travail complété avec cette règle.
