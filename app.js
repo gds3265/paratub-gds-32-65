@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.95 — PWA multi-support */
-const APP_VERSION='1.2.95';
+/* Paratuberculose GDS 32-65 v1.2.96 — PWA multi-support */
+const APP_VERSION='1.2.96';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -2769,7 +2769,7 @@ enhanceExtraViewUI=function(){
 };
 /* ===== fin v1.2.79 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await migrateIntroWorkQueueV187();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await migrateIntroWorkQueueV187();await migrateHistoricalSexV196();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
@@ -4425,3 +4425,105 @@ const memoViewHTML_v195_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v195_base()+`<div class="card"><h2>Contrôle AGDS — règles v1.2.95</h2><p>Les mâles sont exclus de toutes les alertes de descendance, y compris « Mères sorties ». Le retour global animaux AGDS rapproche désormais aussi les EXCIN. Une introduction provenant d'un cheptel Garantie ne génère pas de demande de création EXCIN ; les PS restent suivies séparément selon le référentiel.</p></div>`;};
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.95 ===== */
+
+
+/* ===== v1.2.96 — nouveau CDC introductions + exclusion robuste des mâles ===== */
+function introHasFirstPS_v196(i){
+  const values=[i?.ps1Date,i?.serologyDate,i?.ps1Result,i?.serology,i?.serologyResult,i?.result,i?.control];
+  return values.some(v=>String(v??'').trim()!=='');
+}
+
+async function migrateHistoricalSexV196(){
+  if(state.meta.historicalSexBackfillV196)return;
+  try{
+    let seed=window.PTB_BUNDLED_HISTORY||null;
+    if(!seed){
+      const r=await fetch('./migration/history_seed.json',{cache:'no-store'});
+      if(r.ok)seed=await r.json();
+    }
+    const sexById=new Map((seed?.animals||[]).map(a=>[String(a.animalId||''),sexCode_v194(a.sex||'')]).filter(x=>x[0]&&x[1]));
+    let changed=0;
+    for(let idx=0;idx<state.nonnegatives.length;idx++){
+      const n=state.nonnegatives[idx];
+      if(sexCode_v194(n.sex||''))continue;
+      const sex=sexById.get(String(n.animalId||''));
+      if(!sex)continue;
+      const obj={...n,sex};
+      await db.put('nonnegatives',obj);state.nonnegatives[idx]=obj;changed++;
+    }
+    await setMeta('historicalSexBackfillV196',{doneAt:new Date().toISOString(),changed});
+  }catch(e){
+    console.warn('Récupération du sexe historique v1.2.96 non appliquée',e);
+    await setMeta('historicalSexBackfillV196',{doneAt:new Date().toISOString(),changed:0,error:String(e?.message||e)});
+  }
+}
+
+function sexForAnimal_v196(animalId,ede=''){
+  const id=String(animalId||'');
+  const a=animalIndex().get(id);
+  let sex=sexCode_v194(a?.sex||'');
+  if(sex)return sex;
+  const n=state.nonnegatives.find(x=>String(x.animalId||'')===id&&(!ede||String(x.ede||'')===String(ede)));
+  sex=sexCode_v194(n?.sex||'');
+  return sex;
+}
+animalSex_v194=function(animalId){return sexForAnimal_v196(animalId)};
+
+motherDescendanceAlerts=function(){
+  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=new Set(state.meta.motherDescendanceBaselineVerifiedV145?.keys||[]);
+  for(const n of state.nonnegatives){
+    const m=ai.get(String(n.animalId))||{},e=effectiveAnimalData(n),exitDate=e.exitDate;
+    if(!exitDate)continue;
+    const exit=new Date(exitDate);if(isNaN(exit)||exit<recentCutoff)continue;
+    const sex=sexCode_v194(m.sex||n.sex||'');
+    if(sex==='M')continue; // Un mâle / taureau ne déclenche jamais de vérification de descendance.
+    if(sex&&sex!=='F')continue;
+    const uniq=motherDescendanceAlertKey(n.ede,n.animalId);if(seen.has(uniq))continue;seen.add(uniq);if(baseline.has(uniq))continue;
+    const desc=state.descendants.filter(d=>String(d.ede)===String(n.ede)&&String(effectiveAnimalData(d).motherId||d.motherId||'')===String(n.animalId||''));
+    const recentCalf=desc.find(d=>{const bd=effectiveAnimalData(d).birthDate;if(!bd)return false;const b=new Date(bd);if(isNaN(b))return false;const nineBeforeExit=new Date(exit);nineBeforeExit.setMonth(nineBeforeExit.getMonth()-9);return (b>=nineBeforeExit&&b<=exit)||b>=youngCutoff;});
+    if(recentCalf)continue;
+    const h=herdByEde(n.ede)||{};
+    out.push({ede:n.ede,herdName:h.name||'',motherId:n.animalId,motherName:m.name||n.name||'',exitDate,knownDescendants:desc.length,lastDescendant:desc.map(d=>effectiveAnimalData(d).birthDate).filter(Boolean).sort().at(-1)||'',reason:'Mère non négative sortie récemment sans descendant de moins de 9 mois déjà renseigné'});
+  }
+  return out.sort((a,b)=>String(b.exitDate).localeCompare(String(a.exitDate))||String(a.ede).localeCompare(String(b.ede)));
+};
+
+/* Nouveau CDC : toute introduction en cheptel Garantie nécessite une PS1.
+   - avant PS1 : EXCIN à créer, quelle que soit la provenance ;
+   - si EXCIN existe puis PS1 réalisée : EXCIN à clôturer ;
+   - si Paratu découvre introduction + PS1 ensemble sans EXCIN : ne rien créer ;
+   - après PS1 : provenance Garantie = terminé ; provenance non Garantie = attente PS2 à +9 mois. */
+agdsControlRows=function(){
+  const rows=[];
+  for(const d of state.descendants){
+    const h=herdByEde(d.ede)||{},e=effectiveAnimalData(d),st=descState_v194(d);
+    if(st==='closed'||st==='ok'||st==='ignoredMale')continue;
+    let category='À vérifier AGDS',evidence='';
+    if(st==='missing')category='Créer EXCME AGDS';
+    if(st==='close'){category=d.excinAgds?'À clôturer AGDS':'Créer + clôturer AGDS';evidence=trackingClosureEvidence(d);}
+    rows.push({kind:'Descendant',code:'EXCME',id:d.id,ede:d.ede,herdName:h.name||'',animalId:d.animalId,motherId:e.motherId||d.motherId||'',entryDate:'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:d.result||d.control||'',agdsKnown:!!d.excinAgds,category,evidence,paratuAfter:st==='close'?'Le retour AGDS permettra de confirmer la clôture EXCME.':st==='missing'?'Créer l’EXCME dans AGDS puis marquer la ligne vérifiée.':'Vérifier si un EXCME existe dans AGDS.'});
+  }
+  for(const i of state.introductions){
+    const h=herdByEde(i.ede)||{};
+    if(!introReceivingHerdIsGuarantee_v189(i)||i.introWorkBaselineV187||i.excinClosed)continue;
+    const e=effectiveAnimalData(i),known=!!i.excinAgds,hasPs1=introHasFirstPS_v196(i),originState=originGuaranteeState_v185(i);
+
+    if(hasPs1){
+      // Si aucune EXCIN n'a été créée avant la PS1, il n'y a rien à créer rétroactivement.
+      if(!known)continue;
+      const evidence=trackingClosureEvidence(i)||'PS1 réalisée';
+      rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:i.ps1Result||i.serology||i.serologyResult||i.result||i.control||'',agdsKnown:true,category:'À clôturer AGDS',evidence,paratuAfter:originState===false?'Après clôture EXCIN : attente PS2 à 9 mois après la PS1.':'Après clôture EXCIN : aucune PS2 si la provenance est Garantie / favorable.'});
+      continue;
+    }
+
+    // EXCIN déjà créée et PS1 pas encore faite : le dossier reste simplement ouvert, sans nouvelle action AGDS.
+    if(known)continue;
+    rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:'',agdsKnown:false,category:'Créer EXCIN AGDS',evidence:'',paratuAfter:'EXCIN à garder ouverte jusqu’à la PS1. Après PS1 : clôture EXCIN ; si provenance non Garantie, attente PS2 à +9 mois.'});
+  }
+  return rows.sort((a,b)=>String(a.ede).localeCompare(String(b.ede),'fr',{numeric:true})||String(a.animalId).localeCompare(String(b.animalId),'fr',{numeric:true}));
+};
+
+const memoViewHTML_v196_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v196_base()+`<div class="card"><h2>Contrôle AGDS — règles v1.2.96</h2><p><b>Nouveau cahier des charges :</b> toute introduction en cheptel Garantie nécessite une PS1, y compris si le bovin provient d'un cheptel Garantie. Tant que la PS1 n'est pas réalisée, une EXCIN peut être créée. Si la PS1 est déjà connue au moment du contrôle, Paratu ne demande pas de créer une EXCIN rétroactivement. Si une EXCIN avait été créée avant la PS1, elle passe à clôturer après la PS1. Une provenance non Garantie reste ensuite en attente de PS2 à +9 mois. Les mâles sont exclus des contrôles de descendance, y compris pour les animaux historiques dont le sexe n'était plus présent dans le dernier import.</p></div>`;};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.96 ===== */
