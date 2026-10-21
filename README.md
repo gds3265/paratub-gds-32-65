@@ -393,8 +393,14 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Le récapitulatif de rapprochement met en évidence les échéances PS1 / PS2 et les origines à qualifier.
 
 
-## v1.2.86 — suivi centralisé PS1 / PS2 des introductions
+## v1.2.87 — suivi centralisé PS1 / PS2 des introductions
 - Les introductions déjà importées sont recalculées automatiquement : pas besoin de refaire l’import.
 - Dans Contrôle AGDS, un cadre unique permet de gérer le statut de provenance, PS1, besoin de PS2, échéance PS2 = PS1 + 9 mois, PS2 et les résultats.
 - PS2 peut être calculée automatiquement depuis le statut de provenance ou forcée Oui/Non.
 - Filtres PS1 à faire, PS2 à faire, origine à qualifier et export Excel du suivi complet.
+
+## v1.2.87 — T0 introductions du 21/10/2026
+- Les introductions historiques antérieures sont conservées mais retirées de la file de travail.
+- Le rapprochement `Rapprochement_INTRO_EXCIN_2026-10-21.xlsx` sert de lot de référence : ses introductions restent actives à traiter.
+- Les imports futurs réactivent automatiquement les introductions concernées, y compris lorsqu'elles existaient déjà dans l'historique.
+- La rubrique « Liste de travail » du contrôle AGDS est repliée par défaut et ne se déploie qu'au clic.

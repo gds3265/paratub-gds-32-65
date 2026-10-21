@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.86 — PWA multi-support */
-const APP_VERSION='1.2.86';
+/* Paratuberculose GDS 32-65 v1.2.87 — PWA multi-support */
+const APP_VERSION='1.2.87';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -1580,7 +1580,8 @@ async function importTrackingFile(file,kind){
       // Les nouveaux animaux issus des listes AGDS restent "à traiter" jusqu'à ce qu'un événement soit retrouvé.
       excinAgds:!!(old?.excinAgds||hasAgdsEvent),excinClosed:!!(old?.excinClosed||closedInAgds),
       agdsEventCode:code,agdsEventStart:old?.agdsEventStart||eventStart||'',agdsEventEnd:old?.agdsEventEnd||eventEnd||'',agdsEventInfo:old?.agdsEventInfo||eventInfo||'',
-      trackingImportDate:today(),trackingSourceFile:file.name||'',trackingLastSeen:today()
+      trackingImportDate:today(),trackingSourceFile:file.name||'',trackingLastSeen:today(),
+      ...(isIntro?{introWorkBaselineV187:false,introWorkBatchDateV187:today(),agdsReviewBaselineV157:false}:{})
     };
     const obj=isIntro
       ?{...base,id:old?.id||key(campaign,ede,animalId,entryDate),entryDate}
@@ -2768,7 +2769,7 @@ enhanceExtraViewUI=function(){
 };
 /* ===== fin v1.2.79 ===== */
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await migrateIntroWorkQueueV187();await repairHerdModeConsistency();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
@@ -3542,7 +3543,7 @@ views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.85 ===== */
 
 
-/* ===== v1.2.86 — gestion centralisée PS1 / PS2 des introductions ===== */
+/* ===== v1.2.87 — gestion centralisée PS1 / PS2 des introductions ===== */
 const introFollowupInfo_v185_base=introFollowupInfo_v185;
 introFollowupInfo_v185=function(i){
   const base=introFollowupInfo_v185_base(i),ov=String(i?.ps2RequiredOverride||'').trim();
@@ -3671,9 +3672,9 @@ bindView=function(){
 const memoViewHTML_v186_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v186_base()+`<div class="card"><h2>Suivi centralisé des introductions</h2><ol><li>Après un import, il n’est pas nécessaire de rouvrir les fiches éleveur : aller dans <b>Contrôle AGDS</b>, cadre <b>Contrôles après introduction</b>.</li><li>Les introductions déjà présentes sont recalculées avec la date de naissance connue dans la base animaux.</li><li>Renseigner directement sur la ligne le <b>statut de provenance</b>, PS1, puis laisser <b>PS2 requise = Auto</b> ou forcer Oui/Non si nécessaire.</li><li>Paratu calcule automatiquement l’échéance <b>PS2 = PS1 + 9 mois</b> et met en évidence PS1/PS2 à faire.</li></ol></div>`};
 views.memo=function(){return memoViewHTML()};
-/* ===== fin v1.2.86 ===== */
+/* ===== fin v1.2.87 ===== */
 
-/* v1.2.86 hotfix — chargement à la demande des listes d'introductions pour préserver les performances */
+/* v1.2.87 hotfix — chargement à la demande des listes d'introductions pour préserver les performances */
 function introControlRowHTML_v186(x){
   const {i,h,f,cat}=x;
   return `<tr class="intro-control-row" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-intro-action="${f.actionable?'1':'0'}">
@@ -3712,3 +3713,104 @@ bindView=function(){
     applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'action');
   }
 };
+
+
+/* ===== v1.2.87 — T0 file introductions du 21/10/2026 + liste de travail repliée ===== */
+const INTRO_WORK_BATCH_20261021_KEYS=new Set(["65022504|8160605586|2025-12-04", "65043522|1221162814|2026-03-10", "65054531|3100565882|2025-11-11", "65054531|6518774825|2025-10-09", "65074539|4814223900|2026-05-20", "65074539|4820071729|2026-05-20", "65074539|4822068483|2026-05-20", "65074539|4822068498|2026-05-20", "65074539|4822068530|2026-05-20", "65074539|4823008562|2026-05-20", "65074539|4825011032|2026-05-20", "65074539|4825011047|2026-05-20", "65074539|4825011054|2026-05-20", "65074539|4825011062|2026-05-20", "65074539|4825011064|2026-05-20", "65074539|4825011066|2026-05-20", "65074539|4825011067|2026-05-20", "65074539|4825011068|2026-05-20", "65074539|4825011069|2026-05-20", "65074539|4825011074|2026-05-20", "65074539|4825011075|2026-05-20", "65089509|6414941615|2026-07-25", "65089509|6510253996|2026-07-18", "65089509|8753844630|2026-06-17", "65092522|6505802008|2025-05-06", "65096504|6505864947|2025-11-15", "65105003|6505728702|2026-06-13", "65105003|6514139937|2026-06-13", "65105003|6515421469|2026-06-13", "65109507|3100574389|2026-08-18", "65110008|0923364237|2026-06-10", "65110008|1118044810|2026-05-02", "65112010|6414344524|2026-04-20", "65125008|6518804308|2025-10-25", "65143502|6505869361|2025-04-25", "65143502|6518854334|2025-12-02", "65143502|6518905428|2025-04-25", "65190018|6518774390|2026-03-04", "65203504|6518562292|2026-06-10", "65203504|6518693083|2026-06-10", "65203504|6518693092|2026-06-10", "65203504|6518975331|2025-04-14", "65216002|6514169796|2026-05-18", "65249526|3100661224|2026-09-14", "65277523|4474720579|2026-03-11", "65277523|6518774181|2025-05-28", "65277523|6518774187|2025-05-28", "65279014|0925426548|2026-03-25", "65290545|6413492190|2026-10-18", "65290545|6518673197|2026-08-24", "65295563|6513049813|2026-10-01", "65295563|6516472056|2026-10-01", "65310011|4747547739|2025-04-16", "65310011|6518915318|2025-12-08", "65310027|6505546965|2026-04-22", "65310027|6505873245|2025-01-30", "65310027|6505873247|2025-01-30", "65310027|6514089251|2026-09-09", "65310027|6518653322|2025-12-08", "65319529|1225045742|2026-07-01", "65320503|3610125126|2025-12-03", "65322031|6505724280|2026-07-05", "65322031|6505876607|2025-04-26", "65322043|8160624142|2026-04-10", "65322043|8160664906|2026-04-10", "65329579|6518724837|2026-03-14", "65334526|6518025393|2026-06-19", "65334526|6518744188|2026-06-19", "65344038|6415160854|2026-05-02", "65353011|3100494448|2026-04-21", "65353011|3100494481|2026-04-21", "65353011|3100513432|2026-04-21", "65353011|6513968416|2026-03-25", "65353011|6513968422|2026-03-25", "65353011|6513968429|2026-03-25", "65353011|6513968440|2026-03-25", "65353011|6515361189|2026-03-26", "65353021|6518724078|2026-04-01", "65366506|6518704357|2024-09-09", "65366506|6518704359|2024-09-09", "65366506|6518704360|2024-09-09", "65366506|6518754298|2024-11-21", "65366506|6518754299|2024-11-21", "65366506|6518754321|2024-11-21", "65366506|6518754325|2024-11-21", "65366506|6518754328|2024-11-21", "65366506|6518754333|2024-11-21", "65366520|6515401759|2026-09-08", "65389004|6518714830|2026-04-21", "65389004|8160505591|2026-10-12", "65392032|6518774039|2025-01-27", "65392032|6518774040|2025-01-27", "65392032|6518774042|2025-01-27", "65426013|6513038897|2026-08-16", "65453001|6505872646|2026-03-10", "65453001|6505872673|2026-03-10", "65453001|6505872683|2026-03-10", "65465004|4004475298|2026-03-27", "65465004|4004513669|2026-07-06", "65465004|4004513676|2026-07-06", "65465004|4004530175|2025-04-24", "65465004|4004530177|2025-04-24", "65465009|3222629317|2026-06-10", "65465009|6516502316|2026-10-17"]);
+const INTRO_WORK_BATCH_20261021_PAIRS=new Set(["65022504|8160605586", "65043522|1221162814", "65054531|3100565882", "65054531|6518774825", "65074539|4814223900", "65074539|4820071729", "65074539|4822068483", "65074539|4822068498", "65074539|4822068530", "65074539|4823008562", "65074539|4825011032", "65074539|4825011047", "65074539|4825011054", "65074539|4825011062", "65074539|4825011064", "65074539|4825011066", "65074539|4825011067", "65074539|4825011068", "65074539|4825011069", "65074539|4825011074", "65074539|4825011075", "65089509|6414941615", "65089509|6510253996", "65089509|8753844630", "65092522|6505802008", "65096504|6505864947", "65105003|6505728702", "65105003|6514139937", "65105003|6515421469", "65109507|3100574389", "65110008|0923364237", "65110008|1118044810", "65112010|6414344524", "65125008|6518804308", "65143502|6505869361", "65143502|6518854334", "65143502|6518905428", "65190018|6518774390", "65203504|6518562292", "65203504|6518693083", "65203504|6518693092", "65203504|6518975331", "65216002|6514169796", "65249526|3100661224", "65277523|4474720579", "65277523|6518774181", "65277523|6518774187", "65279014|0925426548", "65290545|6413492190", "65290545|6518673197", "65295563|6513049813", "65295563|6516472056", "65310011|4747547739", "65310011|6518915318", "65310027|6505546965", "65310027|6505873245", "65310027|6505873247", "65310027|6514089251", "65310027|6518653322", "65319529|1225045742", "65320503|3610125126", "65322031|6505724280", "65322031|6505876607", "65322043|8160624142", "65322043|8160664906", "65329579|6518724837", "65334526|6518025393", "65334526|6518744188", "65344038|6415160854", "65353011|3100494448", "65353011|3100494481", "65353011|3100513432", "65353011|6513968416", "65353011|6513968422", "65353011|6513968429", "65353011|6513968440", "65353011|6515361189", "65353021|6518724078", "65366506|6518704357", "65366506|6518704359", "65366506|6518704360", "65366506|6518754298", "65366506|6518754299", "65366506|6518754321", "65366506|6518754325", "65366506|6518754328", "65366506|6518754333", "65366520|6515401759", "65389004|6518714830", "65389004|8160505591", "65392032|6518774039", "65392032|6518774040", "65392032|6518774042", "65426013|6513038897", "65453001|6505872646", "65453001|6505872673", "65453001|6505872683", "65465004|4004475298", "65465004|4004513669", "65465004|4004513676", "65465004|4004530175", "65465004|4004530177", "65465009|3222629317", "65465009|6516502316"]);
+function introWorkKey_v187(i){
+  return `${digits(i?.ede||'')}|${digits(i?.animalId||'')}|${dateISO(i?.entryDate||i?.introductionDate||'')}`;
+}
+function introWorkPair_v187(i){
+  return `${digits(i?.ede||'')}|${digits(i?.animalId||'')}`;
+}
+function introIsMorningBatch_v187(i){
+  const k=introWorkKey_v187(i);
+  if(INTRO_WORK_BATCH_20261021_KEYS.has(k))return true;
+  const d=dateISO(i?.entryDate||i?.introductionDate||'');
+  return !d&&INTRO_WORK_BATCH_20261021_PAIRS.has(introWorkPair_v187(i));
+}
+async function migrateIntroWorkQueueV187(){
+  if(state.meta?.introWorkQueueBaselineV187)return;
+  const updates=[];
+  for(const i of state.introductions){
+    const keep=introIsMorningBatch_v187(i);
+    const wantedBaseline=!keep;
+    if(!!i.introWorkBaselineV187!==wantedBaseline || (keep&&i.agdsReviewBaselineV157)){
+      updates.push({...i,
+        introWorkBaselineV187:wantedBaseline,
+        introWorkBatchDateV187:keep?'2026-10-21':(i.introWorkBatchDateV187||''),
+        ...(keep?{agdsReviewBaselineV157:false}:{})
+      });
+    }
+  }
+  if(updates.length){
+    await db.bulkPut('introductions',updates);
+    state.introductions=await db.all('introductions');
+  }
+  await setMeta('introWorkQueueBaselineV187',{date:new Date().toISOString(),morningBatchKeys:INTRO_WORK_BATCH_20261021_KEYS.size,updated:updates.length});
+}
+
+const introControlRows_v187_base=introControlRows_v186;
+introControlRows_v186=function(){
+  return introControlRows_v187_base().map(x=>{
+    const workActive=!x.i?.introWorkBaselineV187;
+    return {...x,workActive,f:{...x.f,actionable:workActive&&x.f.actionable},cat:workActive?x.cat:'baseline'};
+  });
+};
+
+const agdsControlRows_v187_base=agdsControlRows;
+agdsControlRows=function(){
+  const activeIntroIds=new Set(state.introductions.filter(i=>!i.introWorkBaselineV187).map(i=>String(i.id)));
+  return agdsControlRows_v187_base().filter(r=>r.code!=='EXCIN'||activeIntroIds.has(String(r.id)));
+};
+
+applyIntroFollowupFilter_v186=function(value){
+  const f=value||'action',all=introControlRows_v186();
+  let selected=f==='all'?all:
+    f==='action'?all.filter(x=>x.workActive&&x.f.actionable):
+    all.filter(x=>x.workActive&&x.cat===f);
+  const tbody=$('#introFollowupBody');if(!tbody)return;
+  const cap=f==='all'?1000:500,visible=selected.slice(0,cap);
+  tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v186).join(''):'<tr><td colspan="9">Aucune introduction dans ce filtre.</td></tr>';
+  bindIntroCentralFields_v186();
+  const old=$('#introFollowupLimitNote');if(old)old.remove();
+  if(selected.length>cap){const p=document.createElement('p');p.id='introFollowupLimitNote';p.className='help';p.textContent=`${selected.length-cap} ligne(s) supplémentaires ne sont pas affichées pour préserver les performances ; elles restent incluses dans l’export Excel.`;$('#introControlPanel')?.appendChild(p);}
+};
+
+function foldAgdsWorkListV187(){
+  if(state.view!=='agdsControl')return;
+  const h2=$$('h2').find(el=>String(el.textContent||'').trim()==='Liste de travail');
+  const card=h2?.closest('.card');
+  if(!card||card.closest('details.work-list-details-v187'))return;
+  const details=document.createElement('details');
+  details.className='work-list-details-v187';
+  details.style.margin='0 0 16px';
+  const summary=document.createElement('summary');
+  summary.style.cursor='pointer';
+  summary.style.fontWeight='700';
+  summary.style.fontSize='1.1rem';
+  summary.style.padding='14px 16px';
+  summary.style.background='#fff';
+  summary.style.border='1px solid #dfe4ea';
+  summary.style.borderRadius='12px';
+  summary.textContent='Liste de travail — cliquer pour afficher';
+  card.parentNode.insertBefore(details,card);
+  details.appendChild(summary);
+  details.appendChild(card);
+  card.style.marginTop='10px';
+}
+
+const bindView_v187_base=bindView;
+bindView=function(){
+  bindView_v187_base();
+  if(state.view==='agdsControl')foldAgdsWorkListV187();
+};
+
+const memoViewHTML_v187_base=memoViewHTML;
+memoViewHTML=function(){
+  return memoViewHTML_v187_base()+`<div class="card"><h2>File introductions — T0 du 21/10/2026</h2><p>Les anciennes introductions présentes avant le rapprochement du 21/10/2026 sont conservées dans l'historique mais ne remontent plus dans « À compléter / contrôler ». Le lot importé le 21/10/2026 reste actif. Tout nouvel import d'introductions réactive automatiquement les lignes qu'il contient.</p></div>`;
+};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.87 ===== */
+
