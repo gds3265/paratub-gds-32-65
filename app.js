@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.82 — PWA multi-support */
-const APP_VERSION='1.2.82';
+/* Paratuberculose GDS 32-65 v1.2.84 — PWA multi-support */
+const APP_VERSION='1.2.84';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -3274,3 +3274,206 @@ memoViewHTML=function(){
 };
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.82 ===== */
+
+
+/* ===== v1.2.84 — optimisation performances gros volumes bovins ===== */
+// Les anciennes fonctions reconstruisaient des index complets à chaque appel.
+// Avec plusieurs milliers de bovins, cela pouvait transformer un simple rendu en milliers de parcours de la base.
+let _ptbAnimalIndexRef=null,_ptbAnimalIndexCache=null;
+animalIndex=function(){
+  if(_ptbAnimalIndexRef===state.animals&&_ptbAnimalIndexCache)return _ptbAnimalIndexCache;
+  const m=new Map();for(const a of state.animals)m.set(String(a.animalId),a);
+  _ptbAnimalIndexRef=state.animals;_ptbAnimalIndexCache=m;return m;
+};
+let _ptbHerdIndexRef=null,_ptbHerdIndexCache=null;
+herdByEde=function(ede){
+  if(_ptbHerdIndexRef!==state.herds||!_ptbHerdIndexCache){
+    _ptbHerdIndexCache=new Map();for(const h of state.herds)_ptbHerdIndexCache.set(String(h.ede),h);
+    _ptbHerdIndexRef=state.herds;
+  }
+  return _ptbHerdIndexCache.get(String(ede));
+};
+
+// Cache uniquement les gros exports. Il est invalidé automatiquement dès qu'une des listes source est remplacée après import/modification.
+let _ptbTrackedCache={animals:null,nonnegatives:null,descendants:null,introductions:null,rows:null};
+const allTrackedAnimalRows_v183_base=allTrackedAnimalRows;
+allTrackedAnimalRows=function(){
+  const c=_ptbTrackedCache;
+  if(c.rows&&c.animals===state.animals&&c.nonnegatives===state.nonnegatives&&c.descendants===state.descendants&&c.introductions===state.introductions)return c.rows;
+  const rows=allTrackedAnimalRows_v183_base();
+  _ptbTrackedCache={animals:state.animals,nonnegatives:state.nonnegatives,descendants:state.descendants,introductions:state.introductions,rows};
+  return rows;
+};
+
+let _ptbDeptExportCache=new Map();
+function _ptbDeptExportCacheKey(dept,kind){return `${dept}|${kind}`}
+function _ptbGetDeptExportRows(dept,kind){
+  const k=_ptbDeptExportCacheKey(dept,kind),old=_ptbDeptExportCache.get(k);
+  const refs=[state.herds,state.animals,state.nonnegatives,state.descendants,state.introductions];
+  if(old&&old.refs.every((r,i)=>r===refs[i]))return old.rows;
+  const rows=kind==='tracked'?trackedAnimalRowsForDept(dept):engagedAnimalRowsForDept(dept,{presentOnly:true});
+  _ptbDeptExportCache.set(k,{refs,rows});return rows;
+}
+exportEngagedAnimalsExcel=function(dept){
+  const rows=_ptbGetDeptExportRows(Number(dept),'present');
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun bovin présent pour les engagés de ce département'}]);
+  XLSX.utils.book_append_sheet(wb,ws,`BOVINS_ENGAGES_${dept}`);XLSX.writeFile(wb,`PTB_bovins_presents_engages_${dept}_${today()}.xlsx`);toast(`${rows.length} bovin(s) du ${dept} exporté(s)`);
+};
+exportEngagedAnimalNumbersCsv=function(dept){
+  const rows=_ptbGetDeptExportRows(Number(dept),'present').map(r=>({'N° bovin':r['N° bovin']}));
+  download(`PTB_bovins_presents_engages_${dept}_NUMEROS_${today()}.csv`,toCSV(rows,['N° bovin']),'text/csv;charset=utf-8');toast(`${rows.length} n° bovin du ${dept} exporté(s)`);
+};
+exportTrackedAnimalsDeptExcel=function(dept){
+  const rows=_ptbGetDeptExportRows(Number(dept),'tracked');
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun animal répertorié pour les engagés de ce département'}]);
+  XLSX.utils.book_append_sheet(wb,ws,`ANIMAUX_REPERTORIES_${dept}`);XLSX.writeFile(wb,`PTB_animaux_repertories_engages_${dept}_${today()}.xlsx`);toast(`${rows.length} animal(aux) répertorié(s) du ${dept} exporté(s)`);
+};
+exportTrackedAnimalNumbersDeptCsv=function(dept){
+  const rows=_ptbGetDeptExportRows(Number(dept),'tracked').map(r=>({'N° bovin':r['N° bovin']}));
+  download(`PTB_animaux_repertories_engages_${dept}_NUMEROS_${today()}.csv`,toCSV(rows,['N° bovin']),'text/csv;charset=utf-8');toast(`${rows.length} n° bovin répertorié(s) du ${dept} exporté(s)`);
+};
+// Ne plus construire les quatre grosses listes juste pour afficher un compteur sur la page Exports.
+animalDeptExportRow=function(label,dept,kind='present'){
+  return `<tr><td><strong>${esc(label)}</strong></td><td><span class="help">calculé à l’export</span></td><td><button class="ghost animal-dept-excel" data-dept="${dept}" data-kind="${kind}">Excel complet</button></td><td><button class="ghost animal-dept-csv" data-dept="${dept}" data-kind="${kind}">CSV N° bovin</button></td></tr>`;
+};
+views.exports=function(){return pageHead('Exports','Exports toujours séparés par département pour AGDS')+
+`<div class="card"><h2>Listes de cheptels engagés</h2><p class="help">Travail séparé 32 / 65. Excel complet = toutes les colonnes disponibles. CSV N° cheptel = une seule colonne pour AGDS.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Nombre</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${herdExportRow('Tous les engagés 32','engages32')}${herdExportRow('Tous les engagés 65','engages65')}${herdExportRow('Garantie 32','garantie32')}${herdExportRow('Garantie 65','garantie65')}${herdExportRow('Assainissement 32','ass32')}${herdExportRow('Assainissement 65','ass65')}</tbody></table></div></div>`+
+`<div class="card"><h2>Bovins des cheptels engagés — AGDS</h2><p class="help">Les grosses listes bovins ne sont plus recalculées à chaque affichage : elles sont préparées uniquement quand tu cliques sur un export. CSV AGDS = une seule colonne N° bovin.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Effectif</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${animalDeptExportRow('Bovins présents des engagés 32',32,'present')}${animalDeptExportRow('Bovins présents des engagés 65',65,'present')}${animalDeptExportRow('Tous animaux répertoriés des engagés 32',32,'tracked')}${animalDeptExportRow('Tous animaux répertoriés des engagés 65',65,'tracked')}</tbody></table></div></div>`+
+`<div class="card"><h2>Autres exports de suivi</h2><div class="actions"><button class="ghost export-btn" data-export="nonnegpresent">Non négatifs présents</button><button class="ghost export-btn" data-export="descendants">Descendants</button><button class="ghost export-btn" data-export="introducedAnimals">Bovins introduits</button></div></div>`+
+`<div class="card"><h2>Suivi campagne</h2><div class="actions"><button class="ghost export-btn" data-export="positifs">Cheptels positifs</button><button class="ghost export-btn" data-export="campaignFollowup">Suivi de tous les engagés</button><button class="ghost export-btn" data-export="introductions">Introductions</button></div></div>`+
+`<div class="card"><h2>Sauvegarde complète Excel</h2><button class="primary" id="exportFullExcel">Exporter toute la base en Excel</button></div>`;};
+/* ===== fin v1.2.84 ===== */
+
+/* ===== v1.2.84 — suivi non négatifs simplifié + référentiels sept. 2026 ===== */
+function nnPcrDisplay_v184(n){
+  const result=String(n?.pcrResult||'').trim(),ct=String(n?.pcrCt||'').trim(),date=n?.pcrDate||'';
+  const parts=[];
+  if(result)parts.push(result);
+  if(ct)parts.push(`Ct ${ct}`);
+  if(date)parts.push(fmtDate(date));
+  return parts.join(' · ');
+}
+function nnLrYes_v184(n){
+  if(String(n?.lrRecontrol||'').toLowerCase()==='oui')return true;
+  const f=norm(n?.followupStatus||'');
+  return f.includes('lr')||f.includes('laboratoire de reference')||!!n?.lrRecontrolDate||!!n?.lrPs1KitAResult||!!n?.lrPs1KitBResult||!!n?.lrPs2KitAResult||!!n?.lrPs2KitBResult;
+}
+function nnLrResultOptions_v184(v){
+  const value=String(v||'');
+  return `<option value=""></option><option value="Négatif" ${value==='Négatif'?'selected':''}>Négatif</option><option value="Douteux" ${value==='Douteux'?'selected':''}>Douteux</option><option value="Positif" ${value==='Positif'?'selected':''}>Positif</option>`;
+}
+function nnDoValue_v184(v){return String(v??'').trim();}
+function nnRepeatFromLr_v184(a,b,fallback=''){
+  const vals=[a,b].map(x=>norm(x));
+  if(vals.some(x=>x.includes('posit')))return'Positive';
+  if(vals.some(x=>x.includes('doute')||x.includes('non negatif')))return'Douteuse';
+  if(vals.length&&vals.every(x=>!x||x.includes('negat'))&&vals.some(Boolean))return'Négative';
+  return fallback||'';
+}
+
+nonNegTableForHerd=function(rows){
+  if(!rows.length)return'<div class="empty">Aucun non négatif enregistré.</div>';
+  const ede=String(rows?.[0]?.ede||state.selectedHerd||''),h=herdByEde(ede)||{},ass=isAssainissement(h),ai=animalIndex();
+  if(ass){
+    return `<div class="table-tools"><span class="help">Assainissement : suivi opérationnel. Le PCR de recontrôle reste visible ; les champs propres au référentiel Garantie et au LR sont masqués.</span><button type="button" class="mini-btn herd-table-reset" data-table-reset="nonneg">Tout afficher</button></div><div class="table-wrap"><table class="sortable-table" data-table-kind="nonneg"><thead><tr><th>Animal</th><th>Campagnes non négatives</th><th>Statut animal</th><th>Dernière campagne</th><th>Contexte</th><th>Résultat</th><th>Date</th><th>PCR recontrôle</th><th>Conclusion</th><th>Réforme</th><th>Présence</th><th>Sortie</th><th>Commentaire</th><th></th></tr></thead><tbody>${rows.map(n=>{const a=ai.get(String(n.animalId)),e=effectiveAnimalData(n),ctx=isOutOfProphy(n)?'Hors prophylaxie':(n.resultContext||'Prophylaxie'),res=n.result||(n.pcrResult?`PCR ${n.pcrResult}`:''),status=nonNegativeStatusValue(n),hist=nonNegativeHistoryCampaigns(n);return `<tr class="click-row nn-edit ${e.presence==='Présent'?'':'animal-exited-row'} ${isForcedNegativeNonNegative(n)?'animal-forced-negative-row':''}" data-nn-id="${esc(n.id)}" data-presence="${e.presence==='Présent'?'present':'sorti'}" data-open="${nonNegativeOpen(n)?'1':'0'}"><td><strong>${esc(n.animalId)}</strong><br><small>${esc(a?.name||n.name||'')} ${a?.workNo?`(${esc(a.workNo)})`:''}</small></td><td>${hist.length>1?`<span class="warning-badge">${esc(hist.join(' · '))}</span>`:esc(hist[0]||n.campaign||'')}</td><td><select class="nn-status-inline" data-nn-status-id="${esc(n.id)}"><option value="Non négatif" ${status==='Non négatif'?'selected':''}>Non négatif</option><option value="Forcé négatif" ${status==='Forcé négatif'?'selected':''}>Forcé négatif / clôturé</option>${status==='Hémolysé'?'<option value="Hémolysé" selected>Hémolysé — non comptabilisé</option>':''}</select></td><td>${esc(n.campaign||'')}</td><td>${esc(ctx)}</td><td>${esc(res)}</td><td>${fmtDate(n.date)}</td><td>${esc(nnPcrDisplay_v184(n))}</td><td>${esc(n.conclusion||'')}</td><td>${esc(n.reformStatus||'')}</td><td>${esc(e.presence)}</td><td>${fmtDate(e.exitDate)}</td><td>${esc(n.comment||'')}</td><td><button class="mini-btn nn-edit" data-nn-id="${esc(n.id)}">Modifier</button></td></tr>`}).join('')}</tbody></table></div>`;
+  }
+  return `<div class="table-tools"><span class="help">Garantie : le détail LR n’apparaît dans la fiche animal que si « Recontrôle LR = Oui ».</span><button type="button" class="mini-btn herd-table-reset" data-table-reset="nonneg">Tout afficher</button></div><div class="table-wrap"><table class="sortable-table" data-table-kind="nonneg"><thead><tr><th>Animal</th><th>Campagnes non négatives</th><th>Statut animal</th><th>Dernière campagne</th><th>Contexte</th><th>Résultat</th><th>Date</th><th>Cas référentiel</th><th>PCR recontrôle</th><th>Recontrôle LR</th><th>Conclusion</th><th>Réforme</th><th>Présence</th><th>Sortie</th><th></th></tr></thead><tbody>${rows.map(n=>{const a=ai.get(String(n.animalId)),e=effectiveAnimalData(n),ctx=isOutOfProphy(n)?'Hors prophylaxie':(n.resultContext||'Prophylaxie'),res=n.result||(n.pcrResult?`PCR ${n.pcrResult}`:''),status=nonNegativeStatusValue(n),hist=nonNegativeHistoryCampaigns(n),lr=nnLrYes_v184(n);return `<tr class="click-row nn-edit ${e.presence==='Présent'?'':'animal-exited-row'} ${isForcedNegativeNonNegative(n)?'animal-forced-negative-row':''}" data-nn-id="${esc(n.id)}" data-presence="${e.presence==='Présent'?'present':'sorti'}" data-open="${nonNegativeOpen(n)?'1':'0'}"><td><strong>${esc(n.animalId)}</strong><br><small>${esc(a?.name||n.name||'')} ${a?.workNo?`(${esc(a.workNo)})`:''}</small></td><td>${hist.length>1?`<span class="warning-badge" title="Bovin déjà connu non négatif">${esc(hist.join(' · '))}</span>`:esc(hist[0]||n.campaign||'')}</td><td><select class="nn-status-inline" data-nn-status-id="${esc(n.id)}"><option value="Non négatif" ${status==='Non négatif'?'selected':''}>Non négatif</option><option value="Forcé négatif" ${status==='Forcé négatif'?'selected':''}>Forcé négatif / clôturé</option>${status==='Hémolysé'?'<option value="Hémolysé" selected>Hémolysé — non comptabilisé</option>':''}</select></td><td>${esc(n.campaign||'')}</td><td>${esc(ctx)}</td><td>${esc(res)}</td><td>${fmtDate(n.date)}</td><td><select class="nn-reference-inline" data-nn-ref-id="${esc(n.id)}" title="Cas du référentiel">${referenceCaseOptions(n.referenceCase||firstIntentionForHerd(n.ede,effectiveAnalysisForHerd(n.ede),{}).caseValue||'')}</select></td><td>${esc(nnPcrDisplay_v184(n))}</td><td>${lr?`Oui${n.lrRecontrolDate?` · ${fmtDate(n.lrRecontrolDate)}`:''}`:'Non'}</td><td>${esc(n.conclusion||'')}</td><td>${esc(n.reformStatus||'')}</td><td>${esc(e.presence)}</td><td>${fmtDate(e.exitDate)}</td><td><button class="mini-btn nn-edit" data-nn-id="${esc(n.id)}">Modifier</button></td></tr>`}).join('')}</tbody></table></div>`;
+};
+
+openNNForm=function(defaultEde='',editId=''){
+  if(!ensureWrite())return;
+  const old=editId?state.nonnegatives.find(x=>String(x.id)===String(editId)):null;
+  const n=old||{ede:defaultEde,campaign:state.campaign,date:today(),resultContext:'Prophylaxie'};
+  const initialEde=n.ede||defaultEde,h=herdByEde(initialEde)||{},ass=isAssainissement(h),lrYes=!ass&&nnLrYes_v184(n);
+  const guaranteeOnly=ass?'style="display:none"':'';
+  const lrSectionStyle=lrYes?'':'style="display:none"';
+  openModal(`<h2>${old?'Modifier':'Ajouter / suivre'} un non négatif</h2>
+  <div class="form-grid">
+    ${ass?'<div class="notice" style="grid-column:1 / -1"><b>Cheptel en Assainissement :</b> suivi simplifié. Le PCR de recontrôle est conservé ; cas référentiel, LR et contrôle N+1 sont masqués.</div>':''}
+    <div class="field"><label>EDE</label><input id="nnEde" value="${esc(initialEde)}"></div>
+    <div class="field"><label>Animal</label><input id="nnAnimal" value="${esc(n.animalId||'')}"></div>
+    <div class="field"><label>Campagne</label><input id="nnCamp" value="${esc(n.campaign||state.campaign)}"></div>
+    <div class="field"><label>Contexte du résultat</label><select id="nnContext"><option value="Prophylaxie" ${!isOutOfProphy(n)&&!norm(n.resultContext).includes('introduction')&&!norm(n.resultContext).includes('clinique')?'selected':''}>Prophylaxie</option><option value="Hors prophylaxie" ${isOutOfProphy(n)?'selected':''}>Hors prophylaxie</option><option value="Introduction" ${norm(n.resultContext).includes('introduction')?'selected':''}>Introduction</option><option value="Clinique / diagnostic" ${norm(n.resultContext).includes('clinique')||norm(n.resultContext).includes('diagnostic')?'selected':''}>Clinique / diagnostic</option></select></div>
+    <div class="field"><label>Résultat sérologique</label><select id="nnRes"><option value="" ${!n.result?'selected':''}>Non réalisée / non concernée</option><option ${n.result==='Positif'?'selected':''}>Positif</option><option ${n.result==='Douteux'?'selected':''}>Douteux</option><option ${n.result==='Non négatif'?'selected':''}>Non négatif</option><option ${n.result==='Hémolysé'?'selected':''}>Hémolysé</option></select></div>
+    <div class="field"><label>Statut du bovin</label><select id="nnAnimalStatus"><option value="Non négatif" ${!isForcedNegativeNonNegative(n)?'selected':''}>Non négatif</option><option value="Forcé négatif" ${isForcedNegativeNonNegative(n)?'selected':''}>Forcé négatif / clôturé</option></select><small class="help">Forcé négatif : conserve l’historique mais sort le bovin des compteurs et du suivi ouvert.</small></div>
+    <div class="field"><label>Mère déjà connue non négative ?</label><select id="nnMotherKnown"><option value="">Inconnu / automatique</option><option value="Oui" ${(n.motherKnownNonNegative||n.motherKnownPositive)==='Oui'?'selected':''}>Oui</option><option value="Non" ${(n.motherKnownNonNegative||n.motherKnownPositive)==='Non'?'selected':''}>Non</option></select></div>
+
+    <div class="field full"><div class="info-box"><b>Recontrôle PCR</b> — affiché pour tous les cheptels. Si un Ct est saisi, la PCR est automatiquement considérée <b>positive</b>.</div></div>
+    <div class="field"><label>Date PCR de recontrôle</label><input id="nnPcrDate" class="short-date" value="${esc(shortDateValue(n.pcrDate||''))}" placeholder="JJMMAA"></div>
+    <div class="field"><label>Résultat PCR fèces</label><select id="nnPcr"><option value="" ${!n.pcrResult?'selected':''}>Non faite / inconnue</option><option ${n.pcrResult==='Négative'?'selected':''}>Négative</option><option ${n.pcrResult==='Positive'?'selected':''}>Positive</option></select></div>
+    <div class="field"><label>Ct PCR</label><input id="nnPcrCt" inputmode="decimal" value="${esc(n.pcrCt||'')}" placeholder="ex. 31,8"><small class="help">Ct renseigné = PCR positive.</small></div>
+
+    <div class="field guarantee-only-v184" ${guaranteeOnly}><label>Recontrôle LR ?</label><select id="nnLrRecontrol"><option value="Non" ${!lrYes?'selected':''}>Non</option><option value="Oui" ${lrYes?'selected':''}>Oui</option></select><small class="help">Les champs PS1 / PS2 ne s’affichent que si Oui.</small></div>
+    <div id="nnLrDetails" class="field full guarantee-only-v184" ${ass?'style="display:none"':lrSectionStyle}><div class="subsection-block"><h3>Recontrôle laboratoire de référence (LR)</h3><p class="help">Le LR analyse PS1 et PS2 avec deux kits. Les DO peuvent être saisies librement en %DOc.</p><div class="form-grid">
+      <div class="field"><label>Date de recontrôle / PS2</label><input id="nnLrDate" class="short-date" value="${esc(shortDateValue(n.lrRecontrolDate||''))}" placeholder="JJMMAA"></div>
+      <div class="field"><label>PS1 · Kit A résultat</label><select id="nnPs1KitAResult">${nnLrResultOptions_v184(n.lrPs1KitAResult)}</select></div>
+      <div class="field"><label>PS1 · Kit A DO (%DOc)</label><input id="nnPs1KitADo" inputmode="decimal" value="${esc(nnDoValue_v184(n.lrPs1KitADo))}" placeholder="ex. 12,4"></div>
+      <div class="field"><label>PS1 · Kit B résultat</label><select id="nnPs1KitBResult">${nnLrResultOptions_v184(n.lrPs1KitBResult)}</select></div>
+      <div class="field"><label>PS1 · Kit B DO (%DOc)</label><input id="nnPs1KitBDo" inputmode="decimal" value="${esc(nnDoValue_v184(n.lrPs1KitBDo))}" placeholder="ex. 8,7"></div>
+      <div class="field"><label>PS2 · Kit A résultat</label><select id="nnPs2KitAResult">${nnLrResultOptions_v184(n.lrPs2KitAResult)}</select></div>
+      <div class="field"><label>PS2 · Kit A DO (%DOc)</label><input id="nnPs2KitADo" inputmode="decimal" value="${esc(nnDoValue_v184(n.lrPs2KitADo))}" placeholder="ex. 4,1"></div>
+      <div class="field"><label>PS2 · Kit B résultat</label><select id="nnPs2KitBResult">${nnLrResultOptions_v184(n.lrPs2KitBResult)}</select></div>
+      <div class="field"><label>PS2 · Kit B DO (%DOc)</label><input id="nnPs2KitBDo" inputmode="decimal" value="${esc(nnDoValue_v184(n.lrPs2KitBDo))}" placeholder="ex. 3,5"></div>
+    </div></div></div>
+
+    <div class="field"><label>Conclusion finale</label><select id="nnConclusion"><option value="">À conclure</option><option ${n.conclusion==='Présumé non infecté'?'selected':''}>Présumé non infecté</option><option ${n.conclusion==='Suspect'?'selected':''}>Suspect</option><option ${n.conclusion==='Infecté'?'selected':''}>Infecté</option><option ${n.conclusion==='Discordant - analyses génétiques'?'selected':''}>Discordant - analyses génétiques</option></select></div>
+    <div class="field"><label>Réforme</label><select id="nnReform"><option value="">À suivre</option><option ${n.reformStatus==='Réformé'?'selected':''}>Réformé</option><option ${n.reformStatus==='Non réformé'?'selected':''}>Non réformé</option></select></div>
+    <div class="field"><label>Présence</label><input value="${esc(effectiveAnimalData(n).presence)}" readonly><small class="help">Automatique : sans date de sortie = présent.</small></div>
+    <div class="field"><label>Date sortie</label><input id="nnExitDate" class="short-date" value="${esc(shortDateValue(n.exitDate||''))}" placeholder="JJMMAA"></div>
+    <div class="field"><label>Cause sortie</label><select id="nnExitCause"><option value=""></option>${['Élevage','Boucherie','Mort','Héritage','Autoconsommation'].map(x=>`<option ${n.exitCause===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Date résultat / notification</label><input id="nnDate" class="short-date" value="${esc(shortDateValue(n.date||today()))}" placeholder="JJMMAA"></div>
+    <div class="field guarantee-only-v184" ${guaranteeOnly}><label>Cas du référentiel</label><select id="nnReferenceCase">${referenceCaseOptions(n.referenceCase||firstIntentionForHerd(n.ede||defaultEde,effectiveAnalysisForHerd(n.ede||defaultEde),{}).caseValue||'')}</select><small class="help">Liste normalisée pour les cheptels Garantie.</small></div>
+    <div class="field full guarantee-only-v184" ${guaranteeOnly}><label>Cas de gestion / décision</label><textarea id="nnDecision">${esc(n.managementDecision||n.decision||'')}</textarea></div>
+    <div class="field guarantee-only-v184" ${guaranteeOnly}><label>Contrôle N+1 requis ?</label><select id="nnN1"><option value=""></option><option ${n.controlN1==='Oui'?'selected':''}>Oui</option><option ${n.controlN1==='Non'?'selected':''}>Non</option></select></div>
+    <div class="field full"><label>Commentaire</label><textarea id="nnCom">${esc(n.comment||'')}</textarea></div>
+  </div>
+  ${old&&nonNegativeHistoryCampaigns(n).length?`<div class="info-box"><b>Historique non négatif :</b> ${esc(nonNegativeHistoryCampaigns(n).join(' · '))}</div>`:''}
+  <div class="actions"><button class="primary" id="saveNN">Enregistrer</button>${old?'<button class="danger" id="deleteNN">Supprimer</button>':''}</div>`);
+
+  bindShortDateInputs($('#modalBody'));
+  const pcrCt=$('#nnPcrCt'),pcrResult=$('#nnPcr');
+  if(pcrCt&&pcrResult)pcrCt.oninput=()=>{if(String(pcrCt.value||'').trim())pcrResult.value='Positive'};
+  const lrSelect=$('#nnLrRecontrol'),lrDetails=$('#nnLrDetails');
+  if(lrSelect&&lrDetails)lrSelect.onchange=()=>{lrDetails.style.display=lrSelect.value==='Oui'?'':'none'};
+
+  $('#saveNN').onclick=async()=>{
+    const ede=$('#nnEde').value.trim(),animalId=digits($('#nnAnimal').value);if(!ede||!animalId)return toast('EDE et animal obligatoires');
+    const context=$('#nnContext').value,serology=$('#nnRes').value;
+    const ct=String($('#nnPcrCt')?.value||'').trim().replace(',','.');
+    const pcr=ct?'Positive':($('#nnPcr')?.value||'');
+    if(!old&&!serology&&!pcr)return toast('Renseigner au moins une sérologie ou une PCR pour créer un nouveau non négatif');
+    const exitDate=readShortDate('#nnExitDate'),resultDate=readShortDate('#nnDate'),pcrDate=readShortDate('#nnPcrDate');if(exitDate===null||resultDate===null||pcrDate===null)return;
+    const currentH=herdByEde(ede)||{},isAss=isAssainissement(currentH),lrRecontrol=!isAss&&$('#nnLrRecontrol')?.value==='Oui';
+    let lrDate='';if(lrRecontrol){lrDate=readShortDate('#nnLrDate');if(lrDate===null)return;}
+    const duplicate=!old?state.nonnegatives.find(x=>String(x.ede)===String(ede)&&String(x.animalId)===String(animalId)):null;
+    if(duplicate){const yrs=nonNegativeHistoryCampaigns(duplicate);if(!confirm(`Ce bovin est déjà connu non négatif${yrs.length?` en ${yrs.join(', ')}`:''}.\n\nLa nouvelle campagne sera ajoutée à sa fiche existante et aucune nouvelle ligne ne sera créée.`))return;}
+    const base=old||duplicate||n;
+    const ps1A=lrRecontrol?$('#nnPs1KitAResult').value:(base.lrPs1KitAResult||''),ps1B=lrRecontrol?$('#nnPs1KitBResult').value:(base.lrPs1KitBResult||''),ps2A=lrRecontrol?$('#nnPs2KitAResult').value:(base.lrPs2KitAResult||''),ps2B=lrRecontrol?$('#nnPs2KitBResult').value:(base.lrPs2KitBResult||'');
+    const repeatSerology=lrRecontrol?nnRepeatFromLr_v184(ps2A,ps2B,base.repeatSerology||''):(base.repeatSerology||'');
+    const referenceCase=isAss?(base.referenceCase||''):($('#nnReferenceCase')?.value||'');
+    const occurrence={campaign:$('#nnCamp').value,date:resultDate||n.date||'',result:serology,pcrResult:pcr,pcrCt:ct,pcrDate,repeatSerology,conclusion:$('#nnConclusion').value,referenceCase,context};
+    const animalStatus=$('#nnAnimalStatus').value;
+    const obj={...base,id:base.id||key($('#nnCamp').value,ede,animalId,resultDate||today()),campaign:$('#nnCamp').value,ede,animalId,resultContext:context,result:serology,motherKnownNonNegative:$('#nnMotherKnown').value,pcrResult:pcr,pcrDate,pcrCt:ct,repeatSerology,
+      lrRecontrol:isAss?'Non':(lrRecontrol?'Oui':'Non'),lrRecontrolDate:lrRecontrol?lrDate:(base.lrRecontrolDate||''),
+      lrPs1KitAResult:ps1A,lrPs1KitADo:lrRecontrol?String($('#nnPs1KitADo').value||'').trim():(base.lrPs1KitADo||''),lrPs1KitBResult:ps1B,lrPs1KitBDo:lrRecontrol?String($('#nnPs1KitBDo').value||'').trim():(base.lrPs1KitBDo||''),
+      lrPs2KitAResult:ps2A,lrPs2KitADo:lrRecontrol?String($('#nnPs2KitADo').value||'').trim():(base.lrPs2KitADo||''),lrPs2KitBResult:ps2B,lrPs2KitBDo:lrRecontrol?String($('#nnPs2KitBDo').value||'').trim():(base.lrPs2KitBDo||''),
+      followupStatus:isAss?(base.followupStatus||''):(lrRecontrol?($('#nnConclusion').value?'Conclusion LR reçue':'Dossier transmis au LR'):(pcr||pcrDate?'Recontrôle effectué':'Recontrôle non fait / absent')),
+      conclusion:$('#nnConclusion').value,reformStatus:$('#nnReform').value,presence:exitDate?'Sorti':'Présent',exitDate,exitCause:$('#nnExitCause').value,date:resultDate||n.date||'',referenceCase,
+      managementDecision:isAss?(base.managementDecision||base.decision||''):($('#nnDecision')?.value.trim()||''),controlN1:isAss?(base.controlN1||''):($('#nnN1')?.value||''),comment:$('#nnCom').value,animalStatus,forcedNegative:animalStatus==='Forcé négatif',forcedNegativeAt:animalStatus==='Forcé négatif'?(base.forcedNegativeAt||new Date().toISOString()):'',nonNegativeHistory:mergeNonNegativeHistory(base,[occurrence])};
+    if(isOutOfProphy(obj)&&obj.pcrResult==='Positive'&&!obj.conclusion)obj.conclusion='Infecté';
+    await db.put('nonnegatives',obj);state.nonnegatives=await db.all('nonnegatives');await touchHerd(ede,duplicate?'Bovin déjà non négatif : nouvelle campagne ajoutée':'Non négatif mis à jour');closeModal();render();toast(duplicate?'Bovin déjà connu : historique complété sans créer de doublon':(ct?'PCR enregistrée positive automatiquement car Ct renseigné':'Non négatif enregistré'));
+  };
+  if(old&&$('#deleteNN'))$('#deleteNN').onclick=async()=>{if(!confirm('Supprimer ce non négatif ?'))return;await db.delete('nonnegatives',old.id);state.nonnegatives=await db.all('nonnegatives');closeModal();render()};
+};
+
+referenceLibraryHTML=function(){
+  return pageHead('Référentiels','Documents nationaux intégrés à l’application',``)+
+  `<div class="grid ref-grid"><div class="card"><h2>Référentiel statut favorable</h2><p class="help">Version 4 · septembre 2026. Acquisition, maintien et règles de dépistage. La modalité de maintien par mélanges est documentée mais n’est pas utilisée automatiquement par l’application tant que vous restez sur votre organisation actuelle.</p><div class="actions"><a class="primary ref-button" target="_blank" href="/paratub-gds-32-65/referentiel_statut_favorable.pdf">Ouvrir le document complet</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/referentiel_statut_favorable.pdf#page=5">Acquisition / maintien</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/referentiel_statut_favorable.pdf#page=6">Tolérances / cas particuliers</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/referentiel_statut_favorable.pdf#page=10">Mélanges · PARAMEL</a></div></div><div class="card"><h2>Gestion des résultats non négatifs</h2><p class="help">Version 3 · septembre 2026. PCR, procédure LR PS1/PS2, gestion des infectés et mouvements.</p><div class="actions"><a class="primary ref-button" target="_blank" href="/paratub-gds-32-65/gestion_non_negatifs.pdf">Ouvrir le document complet</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/gestion_non_negatifs.pdf#page=5">Résultats isolés / recontrôle</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/gestion_non_negatifs.pdf#page=6">Douteux</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/gestion_non_negatifs.pdf#page=15">Procédure LR</a><a class="ghost ref-button" target="_blank" href="/paratub-gds-32-65/gestion_non_negatifs.pdf#page=16">Tableau PS1 / PS2</a></div></div></div><div class="card"><h2>Version intégrée</h2><p>Les deux PDF nationaux ont été remplacés par les versions de septembre 2026. Les évolutions sur les mélanges restent informatives pour l’instant et ne changent pas automatiquement vos programmations actuelles.</p></div>`;
+};
+
+const memoViewHTML_v184_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v184_base()+`<div class="card"><h2>Recontrôles non négatifs — saisie simplifiée</h2><ol><li><b>PCR de recontrôle :</b> disponible sur toutes les fiches non négatives avec date, résultat et Ct. Dès qu’un Ct est renseigné, l’application classe automatiquement la PCR comme positive.</li><li><b>Garantie :</b> choisir simplement « Recontrôle LR : Oui / Non ». Si Oui, les champs PS1 et PS2 s’ouvrent pour les résultats Kit A / Kit B et les DO (%DOc).</li><li><b>Assainissement :</b> le PCR de recontrôle reste disponible, mais les éléments propres au cahier des charges Garantie (cas référentiel, LR, contrôle N+1) restent masqués.</li><li><b>Référentiels :</b> versions nationales septembre 2026 intégrées dans l’application.</li></ol></div>`};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.84 ===== */

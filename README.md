@@ -368,9 +368,18 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - En Assainissement, les champs propres au référentiel Garantie sont masqués dans le suivi des non négatifs : cas référentiel, PS2/recontrôle LR, conclusion LR et contrôle N+1 réglementaire.
 
 
-## v1.2.82 — exports bovins séparés 32 / 65
+## v1.2.83 — exports bovins séparés 32 / 65
 - Exports AGDS bovins toujours séparés par département.
 - Bovins présents des engagés 32 et bovins présents des engagés 65.
 - Pour chaque département : Excel complet + CSV contenant uniquement la colonne N° bovin.
 - Les exports « tous animaux répertoriés » sont également séparés 32 / 65.
 - Mémo de travail complété avec cette règle.
+
+
+## v1.2.84 — recontrôles PCR / LR simplifiés + référentiels septembre 2026
+- PCR de recontrôle sur toutes les fiches non négatives : date, résultat et Ct ; tout Ct saisi force le résultat PCR à positif.
+- Garantie : Recontrôle LR Oui/Non ; les détails LR sont masqués si Non. Si Oui : date PS2, résultats et DO (%DOc) PS1 Kit A/B et PS2 Kit A/B.
+- Assainissement : PCR conservée ; cas référentiel, LR et contrôle N+1 restent masqués.
+- Référentiel statut favorable remplacé par la version 4 septembre 2026.
+- Gestion des résultats non négatifs remplacée par la version 3 septembre 2026.
+- Les nouvelles modalités de maintien par mélanges sont documentées mais non activées automatiquement dans la programmation actuelle.
