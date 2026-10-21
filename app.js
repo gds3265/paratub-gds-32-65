@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.94 — PWA multi-support */
-const APP_VERSION='1.2.94';
+/* Paratuberculose GDS 32-65 v1.2.95 — PWA multi-support */
+const APP_VERSION='1.2.95';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -4043,7 +4043,7 @@ memoViewHTML=function(){return memoViewHTML_v192_base()+`<div class="card"><h2>R
 /* ===== fin v1.2.92 ===== */
 
 
-/* ===== v1.2.94 — export AGDS ciblé sur les bovins encore présents dans Paratu ===== */
+/* ===== v1.2.95 — export AGDS ciblé sur les bovins encore présents dans Paratu ===== */
 function presentParatuAnimalRowsForDept_v193(dept){
   dept=Number(dept);
   const herdSet=new Set(engagedHerds().filter(h=>Number(h.dept)===dept).map(h=>String(h.ede||'')));
@@ -4114,9 +4114,9 @@ bindView=function(){
 const memoViewHTML_v193_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v193_base()+`<div class="card"><h2>Export de contrôle AGDS — bovins présents dans Paratu</h2><ol><li>Dans <b>Exports</b>, sortir séparément le CSV <b>Présents dans Paratu 32</b> ou <b>Présents dans Paratu 65</b>.</li><li>Le CSV contient uniquement les n° des bovins encore considérés présents dans Paratu. Les bovins déjà sortis dans Paratu ne sont pas renvoyés inutilement.</li><li>Interroger ces bovins dans AGDS avec les mouvements, analyses, EXCIN et EXCME puis réimporter le fichier animaux du département dans Paratu.</li><li>Le retour permet de mettre à jour les sorties et les clôtures EXCME/EXCIN. Comme un bovin ne sort pas spontanément de Paratu, cette liste constitue la file de contrôle courante.</li></ol></div>`};
 views.memo=function(){return memoViewHTML()};
-/* ===== fin v1.2.94 ===== */
+/* ===== fin v1.2.95 ===== */
 
-/* ===== v1.2.94 — files EXCIN/EXCME clarifiées, filtres 32/65, identité sticky, sexe des mères ===== */
+/* ===== v1.2.95 — files EXCIN/EXCME clarifiées, filtres 32/65, identité sticky, sexe des mères ===== */
 function deptForTracking_v194(rec){
   const h=herdByEde(rec?.ede)||{};return Number(h.dept||rec?.dept||0)||0;
 }
@@ -4323,4 +4323,105 @@ bindView=function(){
 const memoViewHTML_v194_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v194_base()+`<div class="card"><h2>Files EXCIN / EXCME simplifiées</h2><p><b>Introductions :</b> « À vérifier » signifie seulement que la ligne n'a pas encore été contrôlée par l'utilisateur ; l'absence de date de fin EXCIN ne maintient plus artificiellement la ligne en attente. <b>Descendants :</b> distinction entre Vérifié, EXCME présent et état métier (À vérifier / EXCME à créer / EXCME à clôturer / OK). Filtres 32/65 disponibles. Les mâles non négatifs sont exclus de toute logique de descendance.</p></div>`;};
 views.memo=function(){return memoViewHTML()};
-/* ===== fin v1.2.94 ===== */
+/* ===== fin v1.2.95 ===== */
+
+/* ===== v1.2.95 — sexe global + EXCIN depuis retour animaux AGDS ===== */
+function animalSexAny_v195(animalId,ede=''){
+  const id=String(animalId||'');
+  let s=sexCode_v194(animalIndex().get(id)?.sex||'');
+  if(s)return s;
+  const n=state.nonnegatives.find(x=>String(x.animalId||'')===id&&(!ede||String(x.ede||'')===String(ede)));
+  s=sexCode_v194(n?.sex||n?.sexe||'');
+  if(s)return s;
+  const d=state.descendants.find(x=>String(x.animalId||'')===id&&(!ede||String(x.ede||'')===String(ede)));
+  return sexCode_v194(d?.sex||d?.sexe||'');
+}
+/* Même sécurité sur toutes les alertes globales : un mâle ne peut jamais être une "mère à vérifier". */
+const motherDescendanceAlerts_v195_base=motherDescendanceAlerts;
+motherDescendanceAlerts=function(){
+  return motherDescendanceAlerts_v195_base().filter(r=>animalSexAny_v195(r.motherId,r.ede)!=='M');
+};
+descendantMotherIsMale_v194=function(d){
+  const e=effectiveAnimalData(d),mid=String(e.motherId||d?.motherId||'');
+  return !!mid&&animalSexAny_v195(mid,d?.ede)==='M';
+};
+
+function excinEventFromAnimalRow_v195(r){
+  const entries=Object.entries(r||{}),excinFields=entries.filter(([k,v])=>norm(k).includes('excin')&&String(v??'').trim()!=='');
+  const eventEde=digits(pickContains(r,'numero exploitation','excin')||pickContains(r,'exploitation de realisation','excin')||pickContains(r,'exploitation','excin'));
+  const start=parseFrenchDate(pickContains(r,'date debut','excin')||pickContains(r,'debut','excin'));
+  const end=parseFrenchDate(pickContains(r,'date fin','excin')||pickContains(r,'fin','excin'));
+  const info=String(pickContains(r,'informations','excin')||pickContains(r,'information','excin')||'').trim();
+  const literal=excinFields.some(([k,v])=>norm(String(v)).includes('excin')||norm(k).includes('excin'));
+  return{eventEde,start,end,info,present:!!(excinFields.length&&(eventEde||start||end||info||literal))};
+}
+async function reconcileIntroductionsFromAnimalRows_v195(rows,dept){
+  const intros=await db.all('introductions'),exact=new Map(),byAnimal=new Map();
+  for(const i of intros){
+    if(Number(i.dept||herdByEde(i.ede)?.dept||0)!==Number(dept))continue;
+    exact.set(`${String(i.ede||'')}|${String(i.animalId||'')}`,i);
+    const k=String(i.animalId||'');if(k){if(!byAnimal.has(k))byAnimal.set(k,[]);byAnimal.get(k).push(i);}
+  }
+  let checked=0,events=0,matched=0,closed=0,opened=0;const touched=new Map();
+  for(const r of rows){
+    const animalId=digits(pick(r,'Identifiant bovin'));if(!animalId)continue;
+    const currentEde=digits(pick(r,'Exploitation')),e=excinEventFromAnimalRow_v195(r);
+    let i=exact.get(`${currentEde}|${animalId}`);
+    if(!i&&e.eventEde)i=exact.get(`${e.eventEde}|${animalId}`);
+    if(!i){const c=byAnimal.get(animalId)||[];if(c.length===1)i=c[0];}
+    if(!i)continue;
+    checked++;
+    let obj={...i,agdsLastCheckedAt:new Date().toISOString(),introAgdsCheckedV195:true};
+    if(e.present){
+      events++;matched++;obj={...obj,excinAgds:true,introReviewedV194:true,agdsEventCode:'EXCIN',agdsEventStart:e.start||i.agdsEventStart||'',agdsEventEnd:e.end||'',agdsEventInfo:e.info||i.agdsEventInfo||'',agdsSeenSource:`Export global animaux AGDS ${new Date().toLocaleDateString('fr-FR')}`};
+      if(e.end){if(!i.excinClosed)closed++;obj.excinClosed=true;obj.agdsClosureBaseline=true;obj.agdsClosureBaselineAt=new Date().toISOString();obj.agdsClosureBaselineSig=closureCandidateSignature(obj);}
+      else{if(i.excinClosed)opened++;obj.excinClosed=false;obj.agdsClosureBaseline=false;obj.agdsClosureBaselineSig='';}
+    }
+    touched.set(String(obj.id),obj);
+  }
+  if(touched.size)await db.bulkPut('introductions',[...touched.values()]);
+  await setMeta('lastExcinGlobalReconcileV195',{dept:Number(dept),date:new Date().toISOString(),checked,events,matched,closed,opened});
+  return{checked,events,matched,closed,opened};
+}
+
+/* EXCIN n'est à créer que pour une provenance non Garantie / sans statut. Une provenance Garantie ne doit jamais apparaître dans la file EXCIN. */
+agdsControlRows=function(){
+  const rows=[];
+  for(const d of state.descendants){
+    const h=herdByEde(d.ede)||{},e=effectiveAnimalData(d),st=descState_v194(d);
+    if(st==='closed'||st==='ok'||st==='ignoredMale')continue;
+    let category='À vérifier AGDS',evidence='';
+    if(st==='missing')category='Créer EXCME AGDS';
+    if(st==='close'){category=d.excinAgds?'À clôturer AGDS':'Créer + clôturer AGDS';evidence=trackingClosureEvidence(d);}
+    rows.push({kind:'Descendant',code:'EXCME',id:d.id,ede:d.ede,herdName:h.name||'',animalId:d.animalId,motherId:e.motherId||d.motherId||'',entryDate:'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:d.result||d.control||'',agdsKnown:!!d.excinAgds,category,evidence,paratuAfter:st==='close'?'Le retour AGDS permettra de confirmer la clôture EXCME.':st==='missing'?'Créer l’EXCME dans AGDS puis marquer la ligne vérifiée.':'Vérifier si un EXCME existe dans AGDS.'});
+  }
+  for(const i of state.introductions){
+    const h=herdByEde(i.ede)||{};if(!introReceivingHerdIsGuarantee_v189(i)||i.introWorkBaselineV187||i.excinClosed)continue;
+    const originState=originGuaranteeState_v185(i);
+    if(originState===true)continue; // provenance Garantie : pas d'EXCIN à créer.
+    const e=effectiveAnimalData(i),canClose=trackingToClose(i),known=!!i.excinAgds;
+    if(known&&!canClose)continue;
+    let category='Créer EXCIN AGDS';
+    if(originState===null||originState===undefined)category='Statut provenance à vérifier';
+    if(canClose)category=known?'À clôturer AGDS':'Créer + clôturer AGDS';
+    rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:i.result||i.control||i.serology||i.pcr||'',agdsKnown:known,category,evidence:canClose?trackingClosureEvidence(i):'',paratuAfter:originState===false?'EXCIN requis car provenance non Garantie / sans statut.':originState==null?'Renseigner d’abord le statut de provenance.':'Aucune action EXCIN.'});
+  }
+  return rows.sort((a,b)=>String(a.ede).localeCompare(String(b.ede),'fr',{numeric:true})||String(a.animalId).localeCompare(String(b.animalId),'fr',{numeric:true}));
+};
+
+/* Le même retour animaux AGDS met à jour EXCME ET EXCIN. */
+importAnimals=async function(file,dept){
+  const text=await file.text(),rows=parseDelimited(text);
+  const arr=rows.map((r,i)=>{const animalId=digits(pick(r,'Identifiant bovin'));if(!animalId)return null;const exitDate=parseFrenchDate(pick(r,'Date sortie'));const code=pick(r,'Cause de sortie');const cm={E:'Élevage',B:'Boucherie',M:'Mort',H:'Héritage',C:'Autoconsommation'};return{id:key(dept,animalId),dept,animalId,motherId:digits(pick(r,'Numéro mère')),ede:digits(pick(r,'Exploitation')),birthDate:parseFrenchDate(pick(r,'Date naissance')),exitDate,presence:exitDate?'Sorti':'Présent',exitCause:cm[code]||code,workNo:pick(r,'Numéro travail'),name:pick(r,'Nom'),sex:pick(r,'Sexe'),raw:r}}).filter(Boolean);
+  const old=state.animals.filter(a=>Number(a.dept)!==Number(dept));
+  await db.clear('animals');await db.bulkPut('animals',[...old,...arr]);state.animals=await db.all('animals');
+  const excme=await reconcileDescendantsFromAnimalRows_v192(rows,dept);
+  const excin=await reconcileIntroductionsFromAnimalRows_v195(rows,dept);
+  state.descendants=await db.all('descendants');state.introductions=await db.all('introductions');
+  toast(`Animaux ${dept} importés · EXCME : ${excme.matched} rapproché(s), ${excme.closed} clôture(s) · EXCIN : ${excin.matched} retrouvé(s), ${excin.closed} clôture(s)`);
+};
+
+const memoViewHTML_v195_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v195_base()+`<div class="card"><h2>Contrôle AGDS — règles v1.2.95</h2><p>Les mâles sont exclus de toutes les alertes de descendance, y compris « Mères sorties ». Le retour global animaux AGDS rapproche désormais aussi les EXCIN. Une introduction provenant d'un cheptel Garantie ne génère pas de demande de création EXCIN ; les PS restent suivies séparément selon le référentiel.</p></div>`;};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.95 ===== */
