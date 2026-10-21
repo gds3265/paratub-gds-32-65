@@ -412,3 +412,9 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Sélection multiple et actions en masse : EXCME Oui/Non, clôturer, rouvrir.
 - Modification directe des cases EXCME AGDS et Suivi EXCME sur chaque ligne.
 - Chargement des lignes uniquement à l’ouverture du bloc pour préserver les performances.
+
+## Correctifs v1.2.99
+- Campagne : les cheptels « Sans contrat » utilisent le même fond jaune que les cheptels en Assainissement.
+- Garantie : correction de l'alternance de maintien. Une qualification 0I / « inter » programme une année intermédiaire ; une qualification 0N / « année >1 » programme les bovins 24-72 mois.
+- La programmation déjà créée lors d'une bascule est réparée automatiquement à l'ouverture (notamment 65216002 : 24-72 mois en 2026/2027).
+- Une programmation explicite 24-72 mois ou >24 mois n'est plus reclassée à tort en année intermédiaire simplement parce que le statut est « Favorable ».
