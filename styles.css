@@ -99,3 +99,6 @@
 .desc-family-table tr.mother-family-end td{border-bottom:2px solid #d6bdcd!important}
 .desc-family-table tr.mother-family-start .mother-family-cell{border-top-left-radius:10px}
 .desc-family-table tr.mother-family-end .mother-family-cell{border-bottom-left-radius:10px}
+
+/* v1.2.92 — garder l'identité du cheptel visible dans la fiche */
+.herd-sticky-id{position:sticky;top:68px;z-index:7;display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0 0 8px;box-shadow:0 2px 8px rgba(0,0,0,.06)}.herd-sticky-id strong{font-size:15px}.herd-sticky-id span{font-size:12px;color:var(--muted);font-weight:700}.section-nav{top:113px}.herd-section{scroll-margin-top:160px}@media(max-width:900px){.herd-sticky-id{top:68px}.section-nav{top:113px}}
