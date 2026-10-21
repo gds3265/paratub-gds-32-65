@@ -404,3 +404,11 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Le rapprochement `Rapprochement_INTRO_EXCIN_2026-10-21.xlsx` sert de lot de référence : ses introductions restent actives à traiter.
 - Les imports futurs réactivent automatiquement les introductions concernées, y compris lorsqu'elles existaient déjà dans l'historique.
 - La rubrique « Liste de travail » du contrôle AGDS est repliée par défaut et ne se déploie qu'au clic.
+
+
+## v1.2.91 — vérification en masse descendants / EXCME
+- Nouveau bloc centralisé dans Contrôle AGDS, replié par défaut.
+- Filtres Ouverts / Clôturables / EXCME absent AGDS / À vérifier / Tous.
+- Sélection multiple et actions en masse : EXCME Oui/Non, clôturer, rouvrir.
+- Modification directe des cases EXCME AGDS et Suivi EXCME sur chaque ligne.
+- Chargement des lignes uniquement à l’ouverture du bloc pour préserver les performances.

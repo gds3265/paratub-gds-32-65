@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.89 — PWA multi-support */
-const APP_VERSION='1.2.89';
+/* Paratuberculose GDS 32-65 v1.2.91 — PWA multi-support */
+const APP_VERSION='1.2.91';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -3817,7 +3817,7 @@ views.memo=function(){return memoViewHTML()};
 
 /* ===== v1.2.88 — tris N° cheptel / N° bovin dans Contrôle AGDS et suivi introductions ===== */
 
-/* ===== v1.2.89 — contrôles PS1/PS2 uniquement pour les cheptels receveurs en Garantie ===== */
+/* ===== v1.2.90 — contrôles PS1/PS2 uniquement pour les cheptels receveurs en Garantie ===== */
 function introReceivingHerdIsGuarantee_v189(i){
   const h=herdByEde(i?.ede);
   if(!h)return false;
@@ -3837,4 +3837,148 @@ memoViewHTML=function(){
   return memoViewHTML_v189_base()+`<div class="card"><h2>Contrôles d'introduction : périmètre Garantie</h2><p>Les alertes PS1 / PS2 liées au cahier des charges sont calculées uniquement pour les <b>cheptels receveurs en Garantie</b>. Les introductions des cheptels en Assainissement restent conservées dans l'historique mais ne remontent pas dans cette file de travail.</p></div>`;
 };
 views.memo=function(){return memoViewHTML()};
-/* ===== fin v1.2.89 ===== */
+/* ===== fin v1.2.90 ===== */
+
+/* ===== v1.2.90 — vérification en masse descendants / EXCME ===== */
+function descendantBulkRows_v190(){
+  return state.descendants.map(d=>{
+    const h=herdByEde(d.ede)||{},e=effectiveAnimalData(d),toClose=trackingToClose(d),open=trackingOpen(d);
+    let cat='done';
+    if(open&&toClose)cat='close';
+    else if(open&&!d.excinAgds)cat='missing';
+    else if(open)cat='verify';
+    return {d,h,e,toClose,open,cat};
+  });
+}
+function descendantBulkRowHTML_v190(x){
+  const {d,h,e,toClose,open,cat}=x;
+  return `<tr class="desc-bulk-row ${e.presence==='Présent'?'':'animal-exited-row'}" data-desc-bulk-id="${esc(d.id)}" data-desc-bulk-cat="${esc(cat)}">
+    <td data-nosort="1"><input type="checkbox" class="desc-bulk-select" aria-label="Sélectionner ce descendant"></td>
+    <td data-sort-value="${esc(digits(d.ede||''))}"><strong>${esc(d.ede||'')}</strong><div class="help">${esc(h.name||'')}</div></td>
+    <td data-sort-value="${esc(digits(e.motherId||d.motherId||''))}">${esc(e.motherId||d.motherId||'')}</td>
+    <td data-sort-value="${esc(digits(d.animalId||''))}"><strong>${esc(d.animalId||'')}</strong></td>
+    <td data-sort-value="${esc(e.birthDate||'')}">${fmtDate(e.birthDate)}</td>
+    <td data-sort-value="${e.presence==='Présent'?'0':'1'}">${esc(e.presence||'')}</td>
+    <td data-sort-value="${esc(e.exitDate||'')}">${fmtDate(e.exitDate)}</td>
+    <td>${esc(d.result||d.control||d.comment||'')}</td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="desc-bulk-inline" data-field="excinAgds" ${d.excinAgds?'checked':''}> ${d.excinAgds?'Oui':'Non'}</label></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="desc-bulk-inline" data-field="excinClosed" ${d.excinClosed?'checked':''}> ${d.excinClosed?'Clôturé':toClose?'À clôturer':'Ouvert'}</label></td>
+    <td><span class="tracking-status ${cat==='close'||cat==='missing'?'warn':''}">${cat==='close'?'Clôturable':cat==='missing'?'EXCME absent AGDS':cat==='verify'?'À vérifier':'Clôturé'}</span></td>
+  </tr>`;
+}
+function descendantBulkPanel_v190(){
+  const all=descendantBulkRows_v190(),open=all.filter(x=>x.open),close=all.filter(x=>x.cat==='close'),missing=all.filter(x=>x.cat==='missing'),verify=all.filter(x=>x.cat==='verify');
+  return `<details class="card" id="descBulkPanel"><summary style="cursor:pointer;font-weight:700;font-size:1.05rem">Descendants / EXCME — vérification en masse (${open.length} ouvert(s))</summary>
+    <div style="margin-top:14px"><p class="help">Permet de traiter plusieurs descendants sans ouvrir les fiches éleveur. Sélectionne les lignes voulues puis utilise une action en masse.</p>
+    <div class="grid kpi-grid"><button class="campaign-kpi desc-bulk-kpi" data-desc-bulk-filter="open"><span>Ouverts</span><strong>${open.length}</strong></button><button class="campaign-kpi desc-bulk-kpi" data-desc-bulk-filter="close"><span>Clôturables</span><strong>${close.length}</strong></button><button class="campaign-kpi desc-bulk-kpi" data-desc-bulk-filter="missing"><span>EXCME absent AGDS</span><strong>${missing.length}</strong></button><button class="campaign-kpi desc-bulk-kpi" data-desc-bulk-filter="verify"><span>À vérifier</span><strong>${verify.length}</strong></button><button class="campaign-kpi desc-bulk-kpi" data-desc-bulk-filter="all"><span>Tous</span><strong>${all.length}</strong></button></div>
+    <div class="table-tools"><select id="descBulkFilter"><option value="open">Ouverts</option><option value="close">Clôturables</option><option value="missing">EXCME absent AGDS</option><option value="verify">À vérifier</option><option value="all">Tous les descendants</option></select><button class="ghost" id="descBulkSelectVisible">Sélectionner les visibles</button><button class="ghost" id="descBulkClearSelection">Tout désélectionner</button></div>
+    <div class="actions" style="margin:10px 0"><button class="ghost desc-bulk-action" data-action="agdsOn">EXCME AGDS = Oui</button><button class="ghost desc-bulk-action" data-action="agdsOff">EXCME AGDS = Non</button><button class="primary desc-bulk-action" data-action="close">Clôturer les sélectionnés</button><button class="ghost desc-bulk-action" data-action="reopen">Rouvrir les sélectionnés</button></div>
+    <div class="table-wrap"><table class="sortable-table" data-table-kind="desc-bulk"><thead><tr><th data-nosort="1"></th><th>N° cheptel</th><th>N° mère</th><th>N° bovin</th><th>Naissance</th><th>Présence</th><th>Sortie</th><th>Contrôle / résultat</th><th data-nosort="1">EXCME AGDS</th><th data-nosort="1">Suivi EXCME</th><th>État</th></tr></thead><tbody id="descBulkBody"></tbody></table></div>
+    <p class="help" id="descBulkCount"></p></div></details>`;
+}
+function descendantBulkSelectedIds_v190(){
+  return $$('#descBulkBody tr.desc-bulk-row').filter(tr=>tr.style.display!=='none'&&tr.querySelector('.desc-bulk-select')?.checked).map(tr=>tr.dataset.descBulkId);
+}
+function renderDescBulkRows_v190(filter){
+  const f=filter||'open',all=descendantBulkRows_v190();
+  let selected=f==='all'?all:f==='open'?all.filter(x=>x.open):all.filter(x=>x.cat===f);
+  const tbody=$('#descBulkBody');if(!tbody)return;
+  const cap=1000,visible=selected.slice(0,cap);
+  tbody.innerHTML=visible.length?visible.map(descendantBulkRowHTML_v190).join(''):'<tr><td colspan="11">Aucun descendant dans ce filtre.</td></tr>';
+  const count=$('#descBulkCount');if(count)count.textContent=`${selected.length} ligne(s)${selected.length>cap?` · ${selected.length-cap} non affichée(s) pour préserver les performances`:''}`;
+  $$('.desc-bulk-inline',tbody).forEach(el=>el.onchange=()=>saveDescBulkInline_v190(el));
+  if(typeof enhanceSortableTables==='function')enhanceSortableTables(tbody);
+}
+async function saveDescBulkInline_v190(input){
+  if(!ensureWrite()){input.checked=!input.checked;return;}
+  const tr=input.closest('tr[data-desc-bulk-id]'),id=tr?.dataset.descBulkId,idx=state.descendants.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
+  const field=input.dataset.field,obj={...state.descendants[idx],[field]:input.checked};
+  if(field==='excinClosed'&&input.checked)obj.excinAgds=true;
+  await db.put('descendants',obj);state.descendants[idx]=obj;await touchHerd(obj.ede,'Suivi EXCME mis à jour en contrôle centralisé');
+  renderDescBulkRows_v190($('#descBulkFilter')?.value||'open');toast('Descendant mis à jour');
+}
+async function applyDescBulkAction_v190(action){
+  if(!ensureWrite())return;
+  const ids=descendantBulkSelectedIds_v190();if(!ids.length)return toast('Sélectionne au moins un descendant');
+  const idSet=new Set(ids.map(String)),updates=[],edes=new Set();
+  for(const d of state.descendants){
+    if(!idSet.has(String(d.id)))continue;
+    let obj={...d};
+    if(action==='agdsOn')obj.excinAgds=true;
+    if(action==='agdsOff'){obj.excinAgds=false;if(obj.excinClosed)obj.excinClosed=false;}
+    if(action==='close'){obj.excinClosed=true;obj.excinAgds=true;}
+    if(action==='reopen')obj.excinClosed=false;
+    updates.push(obj);edes.add(String(obj.ede||''));
+  }
+  if(!updates.length)return;
+  await db.bulkPut('descendants',updates);state.descendants=await db.all('descendants');
+  for(const ede of edes)await touchHerd(ede,'Suivi EXCME mis à jour en masse');
+  renderDescBulkRows_v190($('#descBulkFilter')?.value||'open');
+  toast(`${updates.length} descendant(s) mis à jour`);
+}
+function bindDescBulkPanel_v190(){
+  if(!$('#descBulkPanel'))return;
+  const load=()=>{const body=$('#descBulkBody');if(body&&!body.children.length)renderDescBulkRows_v190($('#descBulkFilter')?.value||'open');};
+  $('#descBulkPanel').addEventListener('toggle',()=>{if($('#descBulkPanel').open)load()});
+  if($('#descBulkFilter'))$('#descBulkFilter').onchange=e=>renderDescBulkRows_v190(e.target.value);
+  $$('.desc-bulk-kpi').forEach(b=>b.onclick=()=>{const s=$('#descBulkFilter');if(s){s.value=b.dataset.descBulkFilter||'open';renderDescBulkRows_v190(s.value);$('#descBulkPanel').open=true;}});
+  if($('#descBulkSelectVisible'))$('#descBulkSelectVisible').onclick=()=>{$$('#descBulkBody tr.desc-bulk-row').forEach(tr=>{if(tr.style.display!=='none'){const c=tr.querySelector('.desc-bulk-select');if(c)c.checked=true;}})};
+  if($('#descBulkClearSelection'))$('#descBulkClearSelection').onclick=()=>$$('.desc-bulk-select').forEach(c=>c.checked=false);
+  $$('.desc-bulk-action').forEach(b=>b.onclick=()=>applyDescBulkAction_v190(b.dataset.action));
+}
+const agdsControlView_v190_base=views.agdsControl;
+views.agdsControl=function(){return agdsControlView_v190_base()+descendantBulkPanel_v190()};
+const bindView_v190_base=bindView;
+bindView=function(){bindView_v190_base();if(state.view==='agdsControl')bindDescBulkPanel_v190();};
+const memoViewHTML_v190_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v190_base()+`<div class="card"><h2>Vérification en masse des descendants</h2><p>Dans <b>Contrôle AGDS</b>, le cadre <b>Descendants / EXCME — vérification en masse</b> permet de sélectionner plusieurs descendants et de marquer en une fois EXCME présent, clôturé ou rouvert. La liste est repliée par défaut et n'est chargée que lorsqu'elle est ouverte.</p></div>`};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.90 ===== */
+
+
+/* ===== v1.2.91 — descendants regroupés par mère sur la fiche éleveur ===== */
+function descendantMotherResolver_v191(rows){
+  const bySuffix=new Map(),ede=String(rows?.[0]?.ede||state.selectedHerd||'');
+  const add=(id,srcEde)=>{
+    const n=digits(id||''); if(n.length<8) return;
+    if(ede && srcEde && String(srcEde)!==ede) return;
+    const suf=n.slice(-4); if(!bySuffix.has(suf)) bySuffix.set(suf,new Set()); bySuffix.get(suf).add(n);
+  };
+  (rows||[]).forEach(d=>{const e=effectiveAnimalData(d);add(e.motherId||d.motherId,d.ede)});
+  state.nonnegatives.forEach(n=>add(n.animalId,n.ede));
+  state.animals.forEach(a=>add(a.animalId,a.ede));
+  const resolve=raw=>{
+    const n=digits(raw||''); if(!n)return '';
+    if(n.length>=8)return n;
+    if(n.length===4){const set=bySuffix.get(n);if(set&&set.size===1)return [...set][0];}
+    return n;
+  };
+  return resolve;
+}
+function descendantMotherGroups_v191(rows){
+  const resolve=descendantMotherResolver_v191(rows),groups=new Map();
+  for(const d of (rows||[])){
+    const e=effectiveAnimalData(d),raw=digits(e.motherId||d.motherId||''),key=resolve(raw)||raw||'Sans mère';
+    if(!groups.has(key))groups.set(key,{key,items:[],aliases:new Set()});
+    const g=groups.get(key);g.items.push({d,e,raw});if(raw&&raw!==key)g.aliases.add(raw);
+  }
+  return [...groups.values()].sort((a,b)=>String(a.key).localeCompare(String(b.key),'fr',{numeric:true,sensitivity:'base'})).map(g=>{
+    g.items.sort((a,b)=>String(a.e.birthDate||'9999').localeCompare(String(b.e.birthDate||'9999'))||String(a.d.animalId||'').localeCompare(String(b.d.animalId||''),'fr',{numeric:true}));
+    return g;
+  });
+}
+descendantTable=function(rows){
+  if(!rows.length)return'<div class="empty">Aucun descendant enregistré.</div>';
+  const groups=descendantMotherGroups_v191(rows),ai=animalIndex();
+  const body=groups.map((g,gi)=>{
+    const ma=ai.get(String(g.key||''))||{},motherExit=ma.exitDate||'',aliases=[...g.aliases],work=ma.workNo||aliases[0]||'',motherName=ma.name||'';
+    return g.items.map(({d,e},idx)=>{
+      const tc=trackingToClose(d),first=idx===0,last=idx===g.items.length-1;
+      const groupClass=`mother-family-${gi%2?'odd':'even'} ${first?'mother-family-start':''} ${last?'mother-family-end':''}`;
+      const motherCell=first?`<td rowspan="${g.items.length}" class="mother-family-cell ${motherExit?'mother-exited-cell':''}" ${motherExit?`title="Mère sortie le ${esc(fmtDate(motherExit))}"`:''}><div class="mother-family-id"><strong>${esc(g.key||'Non renseignée')}</strong>${work?`<small>N° travail ${esc(work)}</small>`:''}${motherName?`<small>${esc(motherName)}</small>`:''}<span>${g.items.length} descendant${g.items.length>1?'s':''}</span>${motherExit?`<small>Sortie ${fmtDate(motherExit)}</small>`:''}</div></td>`:'';
+      return `<tr class="click-row desc-edit ${groupClass} ${e.presence==='Présent'?'':'animal-exited-row'}" data-desc-id="${esc(d.id)}" data-presence="${e.presence==='Présent'?'present':'sorti'}" data-open="${trackingOpen(d)?'1':'0'}"><td>${esc(d.campaign||'')}</td>${motherCell}<td><strong>${esc(d.animalId||'')}</strong></td><td>${fmtDate(e.birthDate)}</td><td>${esc(e.presence)}</td><td>${fmtDate(e.exitDate)}</td><td>${esc(d.result||d.control||d.comment||'')}</td><td><label class="inline-check"><input type="checkbox" class="tracking-inline" data-store="descendants" data-id="${esc(d.id)}" data-field="excinAgds" ${d.excinAgds?'checked':''}> ${d.excinAgds?'Oui':'Non'}</label></td><td><label class="inline-check"><input type="checkbox" class="tracking-inline" data-store="descendants" data-id="${esc(d.id)}" data-field="excinClosed" ${d.excinClosed?'checked':''}> ${d.excinClosed?'Déjà clôturé':tc?'À vérifier / clôturer AGDS':'Non clôturé'}</label></td><td><button class="mini-btn desc-edit" data-desc-id="${esc(d.id)}">Modifier</button></td></tr>`;
+    }).join('');
+  }).join('');
+  return `<div class="table-tools"><span class="help"><b>Vue regroupée par mère.</b> Les n° de travail à 4 chiffres sont rapprochés automatiquement du n° bovin complet quand la correspondance est unique dans le cheptel.</span><button type="button" class="mini-btn herd-table-reset" data-table-reset="desc">Tout afficher</button></div><div class="table-wrap"><table class="desc-family-table" data-table-kind="desc"><thead><tr><th>Campagne</th><th>Mère</th><th>Descendant</th><th>Naissance</th><th>Présence</th><th>Sortie</th><th>Contrôle</th><th>EXCME AGDS</th><th>Suivi EXCME</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
+};
+/* ===== fin v1.2.91 ===== */
