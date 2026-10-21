@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.96 — PWA multi-support */
-const APP_VERSION='1.2.96';
+/* Paratuberculose GDS 32-65 v1.2.97 — PWA multi-support */
+const APP_VERSION='1.2.97';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -4458,6 +4458,13 @@ async function migrateHistoricalSexV196(){
   }
 }
 
+let bundledSexMap_v197=null;
+function bundledAnimalSex_v197(animalId){
+  if(!bundledSexMap_v197){
+    bundledSexMap_v197=new Map((window.PTB_BUNDLED_HISTORY?.animals||[]).map(a=>[String(a.animalId||''),sexCode_v194(a.sex||'')]).filter(x=>x[0]&&x[1]));
+  }
+  return bundledSexMap_v197.get(String(animalId||''))||'';
+}
 function sexForAnimal_v196(animalId,ede=''){
   const id=String(animalId||'');
   const a=animalIndex().get(id);
@@ -4465,7 +4472,10 @@ function sexForAnimal_v196(animalId,ede=''){
   if(sex)return sex;
   const n=state.nonnegatives.find(x=>String(x.animalId||'')===id&&(!ede||String(x.ede||'')===String(ede)));
   sex=sexCode_v194(n?.sex||'');
-  return sex;
+  if(sex)return sex;
+  // Sécurité v1.2.97 : même si l'import courant ne contient plus le sexe et que la migration locale n'a pas persisté,
+  // on relit directement le sexe connu dans l'historique embarqué.
+  return bundledAnimalSex_v197(id);
 }
 animalSex_v194=function(animalId){return sexForAnimal_v196(animalId)};
 
@@ -4475,7 +4485,7 @@ motherDescendanceAlerts=function(){
     const m=ai.get(String(n.animalId))||{},e=effectiveAnimalData(n),exitDate=e.exitDate;
     if(!exitDate)continue;
     const exit=new Date(exitDate);if(isNaN(exit)||exit<recentCutoff)continue;
-    const sex=sexCode_v194(m.sex||n.sex||'');
+    const sex=sexForAnimal_v196(n.animalId,n.ede);
     if(sex==='M')continue; // Un mâle / taureau ne déclenche jamais de vérification de descendance.
     if(sex&&sex!=='F')continue;
     const uniq=motherDescendanceAlertKey(n.ede,n.animalId);if(seen.has(uniq))continue;seen.add(uniq);if(baseline.has(uniq))continue;
@@ -4527,3 +4537,6 @@ const memoViewHTML_v196_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v196_base()+`<div class="card"><h2>Contrôle AGDS — règles v1.2.96</h2><p><b>Nouveau cahier des charges :</b> toute introduction en cheptel Garantie nécessite une PS1, y compris si le bovin provient d'un cheptel Garantie. Tant que la PS1 n'est pas réalisée, une EXCIN peut être créée. Si la PS1 est déjà connue au moment du contrôle, Paratu ne demande pas de créer une EXCIN rétroactivement. Si une EXCIN avait été créée avant la PS1, elle passe à clôturer après la PS1. Une provenance non Garantie reste ensuite en attente de PS2 à +9 mois. Les mâles sont exclus des contrôles de descendance, y compris pour les animaux historiques dont le sexe n'était plus présent dans le dernier import.</p></div>`;};
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.96 ===== */
+
+/* ===== v1.2.97 — correction taureaux historiques ===== */
+/* Les alertes 'Mères sorties' utilisent désormais le sexe courant OU le sexe de l'historique embarqué. Aucun nouvel import animaux n'est requis pour reconnaître un taureau déjà connu. */
