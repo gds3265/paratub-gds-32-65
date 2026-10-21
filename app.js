@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.88 — PWA multi-support */
-const APP_VERSION='1.2.88';
+/* Paratuberculose GDS 32-65 v1.2.89 — PWA multi-support */
+const APP_VERSION='1.2.89';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -3816,3 +3816,25 @@ views.memo=function(){return memoViewHTML()};
 
 
 /* ===== v1.2.88 — tris N° cheptel / N° bovin dans Contrôle AGDS et suivi introductions ===== */
+
+/* ===== v1.2.89 — contrôles PS1/PS2 uniquement pour les cheptels receveurs en Garantie ===== */
+function introReceivingHerdIsGuarantee_v189(i){
+  const h=herdByEde(i?.ede);
+  if(!h)return false;
+  const c=currentCampaignRecord(i?.ede)||{};
+  return norm(effectiveHerdMode(h,c)).includes('garantie');
+}
+const introControlRows_v189_base=introControlRows_v186;
+introControlRows_v186=function(){
+  return introControlRows_v189_base().filter(x=>introReceivingHerdIsGuarantee_v189(x.i));
+};
+const exportIntroFollowup_v189_base=exportIntroFollowup_v186;
+exportIntroFollowup_v186=function(){
+  return exportIntroFollowup_v189_base();
+};
+const memoViewHTML_v189_base=memoViewHTML;
+memoViewHTML=function(){
+  return memoViewHTML_v189_base()+`<div class="card"><h2>Contrôles d'introduction : périmètre Garantie</h2><p>Les alertes PS1 / PS2 liées au cahier des charges sont calculées uniquement pour les <b>cheptels receveurs en Garantie</b>. Les introductions des cheptels en Assainissement restent conservées dans l'historique mais ne remontent pas dans cette file de travail.</p></div>`;
+};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.89 ===== */
