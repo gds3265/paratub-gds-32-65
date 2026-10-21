@@ -376,10 +376,18 @@ Les non négatifs, descendants, animaux et analyses sont consultés dans la fich
 - Mémo de travail complété avec cette règle.
 
 
-## v1.2.84 — recontrôles PCR / LR simplifiés + référentiels septembre 2026
+## v1.2.85 — recontrôles PCR / LR simplifiés + référentiels septembre 2026
 - PCR de recontrôle sur toutes les fiches non négatives : date, résultat et Ct ; tout Ct saisi force le résultat PCR à positif.
 - Garantie : Recontrôle LR Oui/Non ; les détails LR sont masqués si Non. Si Oui : date PS2, résultats et DO (%DOc) PS1 Kit A/B et PS2 Kit A/B.
 - Assainissement : PCR conservée ; cas référentiel, LR et contrôle N+1 restent masqués.
 - Référentiel statut favorable remplacé par la version 4 septembre 2026.
 - Gestion des résultats non négatifs remplacée par la version 3 septembre 2026.
 - Les nouvelles modalités de maintien par mélanges sont documentées mais non activées automatiquement dans la programmation actuelle.
+
+
+## v1.2.85 — contrôles post-introduction
+- Le rapprochement Excel des introductions indique l’âge à l’introduction, la classe <18 mois / ≥18 mois et la date des 18 mois.
+- PS1 à suivre dès 18 mois, quelle que soit la qualification du cheptel d’origine.
+- PS2 à suivre au moins 9 mois après PS1 si le bovin provient d’un cheptel non Garantie / sans statut.
+- Ajout du statut de provenance, dates/résultats PS1 et PS2 dans la fiche introduction, avec alerte visuelle.
+- Le récapitulatif de rapprochement met en évidence les échéances PS1 / PS2 et les origines à qualifier.

@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.84 — PWA multi-support */
-const APP_VERSION='1.2.84';
+/* Paratuberculose GDS 32-65 v1.2.85 — PWA multi-support */
+const APP_VERSION='1.2.85';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -1535,6 +1535,12 @@ async function importTrackingFile(file,kind){
       motherId=digits(pick(r,'N° mère','Numéro mère','N° mère positive')),
       exitDate=parseFrenchDate(pick(r,'Date sortie','Date de sortie')),
       result=pick(r,'Résultat','Résultat contrôle','Contrôle','Sérologie','Résultat sérologie'),
+      origin=String(pickFlexible(r,['N° cheptel provenance','N° EDE provenance','Cheptel provenance','Exploitation provenance','N° cheptel origine','Cheptel origine','Exploitation origine','Provenance'],[['cheptel','provenance'],['exploitation','provenance'],['cheptel','origine'],['provenance']])||'').trim(),
+      originStatus=String(pickFlexible(r,['Statut cheptel provenance','Qualification cheptel provenance','Statut origine','Qualification origine','Statut provenance','Qualification provenance'],[['statut','provenance'],['qualification','provenance'],['statut','origine'],['qualification','origine']])||'').trim(),
+      ps1Date=parseFrenchDate(pickFlexible(r,['Date PS1','Date prise de sang 1','Date sérologie introduction','Date serologie introduction','Date 1er contrôle sérologique','Date premier contrôle sérologique'],[['date','ps1'],['date','serologie','introduction'],['date','premier','controle','serologique']])),
+      ps1Result=String(pickFlexible(r,['Résultat PS1','Resultat PS1','Résultat sérologie introduction','Resultat serologie introduction','Résultat 1er contrôle','Resultat 1er controle'],[['resultat','ps1'],['resultat','serologie','introduction']])||'').trim(),
+      ps2Date=parseFrenchDate(pickFlexible(r,['Date PS2','Date prise de sang 2','Date 2ème contrôle sérologique','Date deuxième contrôle sérologique'],[['date','ps2'],['date','deuxieme','controle','serologique']])),
+      ps2Result=String(pickFlexible(r,['Résultat PS2','Resultat PS2','Résultat 2ème contrôle','Resultat 2eme controle'],[['resultat','ps2'],['resultat','deuxieme','controle']])||'').trim(),
       eventEde=digits(pickContains(r,'numéro exploitation','dernier évènement',code)),
       eventStart=parseFrenchDate(pickContains(r,'date début','dernier évènement',code)),
       eventEnd=parseFrenchDate(pickContains(r,'date fin','dernier évènement',code)),
@@ -1548,12 +1554,12 @@ async function importTrackingFile(file,kind){
 
     if(isIntro && herdMode.includes('assain')){
       sum.assainissement++;
-      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'À traiter directement AGDS',action:'Introduction en assainissement : traiter directement dans AGDS, sans suivi EXCIN dans Paratu'});
+      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',origin,originStatus,ps1Date,ps1Result,ps2Date,ps2Result,eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'À traiter directement AGDS',action:'Introduction en assainissement : traiter directement dans AGDS, sans suivi EXCIN dans Paratu'});
       continue;
     }
     if(isIntro && !herdMode.includes('garantie')){
       sum.unknownMode++;
-      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'Mode à vérifier',action:'Mode de suivi non identifié : vérifier avant traitement'});
+      report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:'',birthDate:birthDate||'',exitDate:exitDate||'',result:result||'',origin,originStatus,ps1Date,ps1Result,ps2Date,ps2Result,eventStart,eventEnd,eventInfo,existing:false,excluded:true,agdsKnown:hasAgdsEvent,closedAgds:closedInAgds,category:'Mode à vérifier',action:'Mode de suivi non identifié : vérifier avant traitement'});
       continue;
     }
 
@@ -1566,6 +1572,9 @@ async function importTrackingFile(file,kind){
     const base={
       ...(old||{}),ede,dept:Number(ede.slice(0,2)),campaign,animalId,
       birthDate:old?.birthDate||birthDate||a.birthDate||'',motherId:old?.motherId||motherId||a.motherId||'',
+      origin:old?.origin||origin||'',originStatus:old?.originStatus||originStatus||'',
+      ps1Date:old?.ps1Date||ps1Date||'',ps1Result:old?.ps1Result||ps1Result||old?.serology||'',
+      ps2Date:old?.ps2Date||ps2Date||'',ps2Result:old?.ps2Result||ps2Result||'',
       exitDate:effectiveExit,presence:effectiveExit?'Sorti':'Présent',result:old?.result||result||'',
       // Une fiche Excel historique signifie que l'événement EXCIN/EXCME a déjà été vu et saisi dans AGDS.
       // Les nouveaux animaux issus des listes AGDS restent "à traiter" jusqu'à ce qu'un événement soit retrouvé.
@@ -1612,21 +1621,21 @@ async function importTrackingFile(file,kind){
     if((!oldSnapshot?.exitDate)&&effectiveExit)paratuChanges.push(`Date de sortie prise en compte : ${fmtDate(effectiveExit)}`);
     if(!paratuChanges.length)paratuChanges.push('Aucun changement automatique dans Paratu');
     const paratuAction=paratuChanges.join(' · ');
-    report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:obj.motherId||'',birthDate:obj.birthDate||'',exitDate:effectiveExit||'',result:obj.result||'',eventStart,eventEnd,eventInfo,existing:!!old,excluded:false,agdsKnown:!!obj.excinAgds,closedAgds:!!obj.excinClosed,category,action,paratuAction});
+    report.push({kind,code,animalId,ede,herdName,entryDate:entryDate||'',motherId:obj.motherId||'',birthDate:obj.birthDate||'',origin:obj.origin||'',originStatus:obj.originStatus||'',ps1Date:obj.ps1Date||'',ps1Result:obj.ps1Result||'',ps2Date:obj.ps2Date||'',ps2Result:obj.ps2Result||'',exitDate:effectiveExit||'',result:obj.result||'',eventStart,eventEnd,eventInfo,existing:!!old,excluded:false,agdsKnown:!!obj.excinAgds,closedAgds:!!obj.excinClosed,category,action,paratuAction});
   }
 
   await loadState();
 
   const actionableCategories=new Set(['À traiter dans AGDS','À créer + clôturer AGDS','À clôturer AGDS','Déjà clôturé — ressort dans la liste','À traiter directement AGDS','Mode à vérifier']);
-  const actionRows=report.filter(x=>actionableCategories.has(x.category));
-  const details=actionRows.slice(0,250).map(x=>`<tr><td><strong>${esc(x.animalId)}</strong></td><td>${esc(x.ede)}</td><td>${esc(x.herdName||'')}</td>${isIntro?`<td>${fmtDate(x.entryDate)}</td>`:`<td>${esc(x.motherId||'')}</td>`}<td><span class="tracking-status ${x.category.includes('clôturer')?'warn':''}">${esc(x.category)}</span></td><td>${esc(x.action)}</td><td>${esc(x.paratuAction||'Aucune modification automatique')}</td></tr>`).join('');
+  const actionRows=report.filter(x=>actionableCategories.has(x.category)||(isIntro&&introFollowupInfo_v185(x).actionable));
+  const details=actionRows.slice(0,250).map(x=>{const f=isIntro?introFollowupInfo_v185(x):null;return `<tr><td><strong>${esc(x.animalId)}</strong></td><td>${esc(x.ede)}</td><td>${esc(x.herdName||'')}</td>${isIntro?`<td>${fmtDate(x.entryDate)}</td><td><span class="tracking-status ${f?.actionable?'warn':''}">${esc(f?.ageClass||'')}</span><div class="help">${esc(f?.controlLabel||'')}</div></td>`:`<td>${esc(x.motherId||'')}</td>`}<td><span class="tracking-status ${x.category.includes('clôturer')?'warn':''}">${esc(x.category)}</span></td><td>${esc(x.action)}</td><td>${esc(x.paratuAction||'Aucune modification automatique')}</td></tr>`}).join('');
 
-  function reportRows(src){return src.map(x=>({
+  function reportRows(src){return src.map(x=>{const f=isIntro?introFollowupInfo_v185(x):null;return ({
     'Type':isIntro?'Introduction':'Descendant',
     'EDE':x.ede,
     'Éleveur':x.herdName||'',
     'N° bovin':x.animalId,
-    ...(isIntro?{'Date introduction':fmtDate(x.entryDate)}:{'N° mère':x.motherId||''}),
+    ...(isIntro?{'Date introduction':fmtDate(x.entryDate),'Âge à introduction (mois)':f?.ageMonths??'','Classe âge introduction':f?.ageClass||'','Dépistable à introduction':f?.atIntroTestable||'','Date 18 mois':fmtDate(f?.date18m),'Cheptel provenance':x.origin||'','Statut provenance':f?.originLabel||'','PS1 à partir du':fmtDate(f?.ps1Due),'Date PS1':fmtDate(x.ps1Date),'Résultat PS1':x.ps1Result||'','PS2 requise':f?.ps2RequiredLabel||'','PS2 à partir du':fmtDate(f?.ps2Due),'Date PS2':fmtDate(x.ps2Date),'Résultat PS2':x.ps2Result||'','Alerte contrôles introduction':f?.controlLabel||''}:{'N° mère':x.motherId||''}),
     'Date naissance':fmtDate(x.birthDate),
     'Date sortie':fmtDate(x.exitDate),
     'Résultat / contrôle':x.result||'',
@@ -1639,7 +1648,7 @@ async function importTrackingFile(file,kind){
     'Début événement AGDS':fmtDate(x.eventStart),
     'Fin événement AGDS':fmtDate(x.eventEnd),
     'Info événement AGDS':x.eventInfo||''
-  }))}
+  })})}
 
   function exportTrackingRecap(){
     const all=reportRows(report),todo=reportRows(actionRows),summary=[
@@ -1683,9 +1692,9 @@ async function importTrackingFile(file,kind){
       ${modeKpis}
     </div>
     <div class="actions" style="margin:14px 0"><button class="primary" id="btnExportTrackingRecap">Exporter le récap Excel</button></div>
-    <p class="help">${isIntro?'Rapprochement strict = bovin + EDE + date d’introduction. Les introductions ne sont suivies dans Paratu que pour les cheptels en Garantie.':'Pour les descendants, le suivi métier est EXCME. Les bovins déjà présents dans tes fiches historiques sont considérés comme déjà vus et saisis dans AGDS.'}</p>
+    <p class="help">${isIntro?'Rapprochement strict = bovin + EDE + date d’introduction. Le récap Excel indique aussi si le bovin avait <18 mois ou ≥18 mois à l’introduction, l’échéance PS1 dès 18 mois et, si l’origine est non Garantie, l’échéance PS2 au moins 9 mois après PS1.':'Pour les descendants, le suivi métier est EXCME. Les bovins déjà présents dans tes fiches historiques sont considérés comme déjà vus et saisis dans AGDS.'}</p>
     <p class="help"><b>Lecture :</b> « À traiter dans AGDS » = événement ${code} à créer. « À clôturer AGDS » = événement déjà connu mais sortie ou contrôle favorable détecté. « Déjà clôturé mais ressort » = ton suivi le considère terminé alors qu’il réapparaît dans la liste AGDS.</p>
-    ${actionRows.length?`<h3>À faire / vérifier dans AGDS</h3><div class="table-wrap"><table><thead><tr><th>Bovin</th><th>EDE</th><th>Éleveur</th><th>${isIntro?'Introduction':'Mère'}</th><th>État</th><th>Action AGDS</th><th>Mise à jour Paratu</th></tr></thead><tbody>${details}</tbody></table></div>${actionRows.length>250?`<p class="help">${actionRows.length-250} autre(s) ligne(s) sont incluses dans l’export Excel.</p>`:''}`:'<div class="success-box">Aucune action AGDS détectée sur ce fichier.</div>'}
+    ${actionRows.length?`<h3>À faire / vérifier dans AGDS</h3><div class="table-wrap"><table><thead><tr><th>Bovin</th><th>EDE</th><th>Éleveur</th><th>${isIntro?'Introduction':'Mère'}</th>${isIntro?'<th>Âge / contrôles</th>':''}<th>État</th><th>Action AGDS</th><th>Mise à jour Paratu</th></tr></thead><tbody>${details}</tbody></table></div>${actionRows.length>250?`<p class="help">${actionRows.length-250} autre(s) ligne(s) sont incluses dans l’export Excel.</p>`:''}`:'<div class="success-box">Aucune action AGDS détectée sur ce fichier.</div>'}
     ${sum.ignored?`<p>${sum.ignored} ligne(s) ignorée(s) faute d’identifiants suffisants.</p>`:''}`);
   const btn=$('#btnExportTrackingRecap');if(btn)btn.onclick=exportTrackingRecap;
 }
@@ -3477,3 +3486,57 @@ const memoViewHTML_v184_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v184_base()+`<div class="card"><h2>Recontrôles non négatifs — saisie simplifiée</h2><ol><li><b>PCR de recontrôle :</b> disponible sur toutes les fiches non négatives avec date, résultat et Ct. Dès qu’un Ct est renseigné, l’application classe automatiquement la PCR comme positive.</li><li><b>Garantie :</b> choisir simplement « Recontrôle LR : Oui / Non ». Si Oui, les champs PS1 et PS2 s’ouvrent pour les résultats Kit A / Kit B et les DO (%DOc).</li><li><b>Assainissement :</b> le PCR de recontrôle reste disponible, mais les éléments propres au cahier des charges Garantie (cas référentiel, LR, contrôle N+1) restent masqués.</li><li><b>Référentiels :</b> versions nationales septembre 2026 intégrées dans l’application.</li></ol></div>`};
 views.memo=function(){return memoViewHTML()};
 /* ===== fin v1.2.84 ===== */
+
+
+/* ===== v1.2.85 — contrôles sérologiques post-introduction ===== */
+function dateObj_v185(v){const iso=dateISO(v);if(!iso)return null;const d=new Date(iso+'T12:00:00');return isNaN(d)?null:d}
+function ageMonthsAt_v185(birth,when){const b=dateObj_v185(birth),d=dateObj_v185(when);if(!b||!d)return null;let m=(d.getFullYear()-b.getFullYear())*12+(d.getMonth()-b.getMonth());if(d.getDate()<b.getDate())m--;return m}
+function originGuaranteeState_v185(i){
+  const raw=norm(i?.originStatus||i?.originQualification||'');
+  if(raw){
+    if(raw.includes('non garantie')||raw.includes('sans statut')||raw.includes('non favorable')||raw.includes('assain')||raw.includes('inconnu'))return false;
+    if(raw.includes('garantie')||raw.includes('favorable a')||raw.includes('favorable b'))return true;
+  }
+  const originEde=digits(i?.origin||i?.originEde||'');
+  if(originEde){const h=herdByEde(originEde);if(h){const txt=norm(`${h.mode||''} ${h.currentQualification||''} ${h.statusOverride||''}`);if(txt.includes('garantie')||txt.includes('favorable a')||txt.includes('favorable b'))return true;if(txt.includes('assain')||txt.includes('plan de maitrise')||txt.includes('sscontrat'))return false;}}
+  return null;
+}
+function introFollowupInfo_v185(i){
+  const a=animalIndex().get(String(i?.animalId||''))||{}, birth=i?.birthDate||a.birthDate||'', entry=i?.entryDate||i?.introductionDate||'';
+  const date18m=addMonths(birth,18), ageMonths=ageMonthsAt_v185(birth,entry);
+  const ageClass=ageMonths==null?'Âge inconnu':(ageMonths>=18?'≥18 mois':'<18 mois');
+  const atIntroTestable=ageMonths==null?'À vérifier':(ageMonths>=18?'Oui':'Non');
+  let ps1Due='';if(entry&&date18m){ps1Due=String(entry)>=String(date18m)?entry:date18m}else ps1Due=entry||date18m||'';
+  const ps1Date=i?.ps1Date||i?.serologyDate||'', ps1Result=i?.ps1Result||i?.serology||i?.serologyResult||'';
+  const originGuarantee=originGuaranteeState_v185(i), originLabel=originGuarantee===true?'Garantie / favorable':originGuarantee===false?'Non Garantie / sans statut':'À vérifier';
+  const ps2Required=originGuarantee===false, ps2RequiredLabel=originGuarantee===null?'À vérifier':(ps2Required?'Oui':'Non');
+  const ps2Due=ps2Required&&ps1Date?addMonths(ps1Date,9):'';
+  const ps2Date=i?.ps2Date||'', ps2Result=i?.ps2Result||'';
+  const exit=effectiveAnimalData(i||{}).exitDate||i?.exitDate||'', now=today();
+  let controlLabel='', actionable=false;
+  if(originGuarantee===null){controlLabel='Origine à qualifier pour savoir si PS2 est requise';actionable=true;}
+  if(!ps1Date&&!ps1Result){
+    if(ps1Due&&exit&&String(exit)<String(ps1Due)) controlLabel=controlLabel||'Sorti avant l’échéance PS1';
+    else if(ps1Due&&String(now)>=String(ps1Due)){controlLabel=`PS1 à faire${ageMonths!=null&&ageMonths<18?' dès 18 mois':''}`;actionable=true;}
+    else if(ps1Due) controlLabel=controlLabel||`PS1 à partir du ${fmtDate(ps1Due)}`;
+    else {controlLabel=controlLabel||'Date naissance à renseigner pour calculer PS1';actionable=true;}
+  }else if(!ps1Date&&ps1Result){controlLabel='PS1 connue · date à renseigner';actionable=true;}
+  else if(ps2Required&&!ps2Date&&!ps2Result){
+    if(ps2Due&&String(now)>=String(ps2Due)){controlLabel='PS2 à faire (≥9 mois après PS1)';actionable=true;}
+    else if(ps2Due) controlLabel=`PS2 à partir du ${fmtDate(ps2Due)}`;
+    else {controlLabel='PS2 requise · date PS1 nécessaire pour calculer l’échéance';actionable=true;}
+  }else if(ps2Required&&!ps2Date&&ps2Result){controlLabel='PS2 connue · date à renseigner';actionable=true;}
+  else if(ps2Required) controlLabel='PS1 + PS2 renseignées';
+  else if(originGuarantee===true) controlLabel=ps1Date||ps1Result?'PS1 renseignée · pas de PS2 requise':'PS1 à suivre';
+  return{birth,entry,date18m,ageMonths,ageClass,atIntroTestable,ps1Due,ps1Date,ps1Result,originGuarantee,originLabel,ps2Required,ps2RequiredLabel,ps2Due,ps2Date,ps2Result,controlLabel,actionable};
+}
+function introOriginOptions_v185(v){const n=norm(v||'');return `<option value="" ${!v?'selected':''}>À vérifier</option><option value="Garantie / favorable" ${n.includes('garantie')||n.includes('favorable')?'selected':''}>Garantie / favorable</option><option value="Non Garantie / sans statut" ${n.includes('non garantie')||n.includes('sans statut')||n.includes('assain')?'selected':''}>Non Garantie / sans statut</option>`}
+
+introductionTable=function(rows){if(!rows.length)return'<div class="empty">Aucune introduction enregistrée.</div>';return`<div class="table-tools"><span class="help">Les contrôles sérologiques sont suivis dès 18 mois. PS2 = au moins 9 mois après PS1 si provenance non Garantie.</span><button type="button" class="mini-btn herd-table-reset" data-table-reset="intro">Tout afficher</button></div><div class="table-wrap"><table class="sortable-table" data-table-kind="intro"><thead><tr><th>Animal</th><th>Date introduction</th><th>Âge intro</th><th>18 mois le</th><th>Provenance</th><th>Suivi sérologique</th><th>Présence</th><th>Sortie</th><th>EXCIN AGDS</th><th>Suivi EXCIN</th><th data-nosort="1"></th></tr></thead><tbody>${rows.map(i=>{const e=effectiveAnimalData(i),tc=trackingToClose(i),f=introFollowupInfo_v185(i);return`<tr class="click-row intro-edit ${e.presence==='Présent'?'':'animal-exited-row'}" data-intro-id="${esc(i.id)}" data-presence="${e.presence==='Présent'?'present':'sorti'}" data-open="${trackingOpen(i)?'1':'0'}"><td><strong>${esc(i.animalId||'')}</strong></td><td data-sort-value="${esc(i.entryDate||i.introductionDate||'')}">${fmtDate(i.entryDate||i.introductionDate)}</td><td data-sort-value="${f.ageMonths??999}"><span class="tracking-status ${f.ageMonths!=null&&f.ageMonths>=18?'warn':''}">${esc(f.ageClass)}</span></td><td data-sort-value="${esc(f.date18m||'')}">${fmtDate(f.date18m)}</td><td>${esc(i.origin||'')}<div class="help">${esc(f.originLabel)}</div></td><td><span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span>${f.ps1Date?`<div class="help">PS1 ${fmtDate(f.ps1Date)}${f.ps1Result?` · ${esc(f.ps1Result)}`:''}</div>`:''}${f.ps2Date?`<div class="help">PS2 ${fmtDate(f.ps2Date)}${f.ps2Result?` · ${esc(f.ps2Result)}`:''}</div>`:''}</td><td data-sort-value="${e.presence==='Présent'?'0':'1'}">${esc(e.presence)}</td><td data-sort-value="${esc(e.exitDate||'')}">${fmtDate(e.exitDate)}</td><td data-sort-value="${i.excinAgds?'0':'1'}"><label class="inline-check"><input type="checkbox" class="tracking-inline" data-store="introductions" data-id="${esc(i.id)}" data-field="excinAgds" ${i.excinAgds?'checked':''}> ${i.excinAgds?'Oui':'Non'}</label></td><td data-sort-value="${i.excinClosed?'2':tc?'1':'0'}"><label class="inline-check"><input type="checkbox" class="tracking-inline" data-store="introductions" data-id="${esc(i.id)}" data-field="excinClosed" ${i.excinClosed?'checked':''}> ${i.excinClosed?'Déjà clôturé':tc?'À vérifier / clôturer AGDS':'Non clôturé'}</label></td><td><button class="mini-btn intro-edit" data-intro-id="${esc(i.id)}">Modifier</button></td></tr>`}).join('')}</tbody></table></div>`}
+
+openIntroForm=function(defaultEde='',editId=''){if(!ensureWrite())return;const h=herdByEde(defaultEde);if(h&&!norm(h.mode).includes('garantie'))return toast('Les introductions sont suivies uniquement pour les cheptels Garantie');const old=editId?state.introductions.find(x=>String(x.id)===String(editId)):null,i=old||{ede:defaultEde},e=effectiveAnimalData(i),f=introFollowupInfo_v185(i);openModal(`<h2>${old?'Modifier':'Ajouter'} une introduction</h2><div class="form-grid"><div class="field"><label>EDE</label><input id="iEde" value="${esc(i.ede||defaultEde)}"></div><div class="field"><label>N° bovin</label><input id="iAnimal" value="${esc(i.animalId||'')}"></div><div class="field"><label>Date introduction</label><input id="iDate" class="short-date" value="${esc(shortDateValue(i.entryDate||i.introductionDate||''))}" placeholder="JJMMAA"></div><div class="field"><label>Date naissance</label><input id="iBirth" class="short-date" value="${esc(shortDateValue(e.birthDate||''))}" placeholder="JJMMAA"></div><div class="field"><label>18 mois le</label><input id="i18" value="${esc(fmtDate(addMonths(e.birthDate,18)))}" readonly></div><div class="field"><label>Âge à l’introduction</label><input id="iAgeIntro" value="${esc(f.ageClass)}" readonly></div><div class="field"><label>Cheptel de provenance</label><input id="iOrigin" value="${esc(i.origin||'')}"></div><div class="field"><label>Statut provenance</label><select id="iOriginStatus">${introOriginOptions_v185(i.originStatus||'')}</select><small class="help">PS2 requise si provenance non Garantie / sans statut.</small></div><div class="field"><label>Date PS1</label><input id="iPs1Date" class="short-date" value="${esc(shortDateValue(i.ps1Date||''))}" placeholder="JJMMAA"></div><div class="field"><label>Résultat PS1</label><input id="iPs1Result" value="${esc(i.ps1Result||i.serology||i.serologyResult||'')}"></div><div class="field"><label>Date PS2</label><input id="iPs2Date" class="short-date" value="${esc(shortDateValue(i.ps2Date||''))}" placeholder="JJMMAA"></div><div class="field"><label>Résultat PS2</label><input id="iPs2Result" value="${esc(i.ps2Result||'')}"></div><div class="field"><label>PCR introduction</label><input id="iPcr" value="${esc(i.pcr||i.pcrResult||'')}"></div><div class="field"><label>Résultat / contrôle libre</label><input id="iResult" value="${esc(i.result||i.control||'')}"></div><div class="field full"><div id="introFollowupPreview" class="info-box">${esc(f.controlLabel)}</div></div><div class="field"><label><input id="iExcinAgds" type="checkbox" ${i.excinAgds?'checked':''}> EXCIN AGDS</label></div><div class="field"><label><input id="iExcinClosed" type="checkbox" ${i.excinClosed?'checked':''}> EXCIN clôturée</label></div><div class="field full"><label>Commentaire</label><textarea id="iComment">${esc(i.comment||'')}</textarea></div></div><div class="actions"><button class="primary" id="saveIntro">Enregistrer</button>${old?'<button class="danger" id="deleteIntro">Supprimer</button>':''}</div>`);bindShortDateInputs($('#modalBody'));const preview=()=>{const tmp={...i,animalId:digits($('#iAnimal').value),entryDate:dateISO($('#iDate').value)||'',birthDate:dateISO($('#iBirth').value)||'',origin:$('#iOrigin').value.trim(),originStatus:$('#iOriginStatus').value,ps1Date:dateISO($('#iPs1Date').value)||'',ps1Result:$('#iPs1Result').value.trim(),ps2Date:dateISO($('#iPs2Date').value)||'',ps2Result:$('#iPs2Result').value.trim()};const ff=introFollowupInfo_v185(tmp);$('#i18').value=fmtDate(ff.date18m);$('#iAgeIntro').value=ff.ageClass;$('#introFollowupPreview').textContent=ff.controlLabel};const fill=()=>{const a=animalIndex().get(String(digits($('#iAnimal').value)));if(a&&!$('#iBirth').value)$('#iBirth').value=shortDateValue(a.birthDate||'');preview()};['#iAnimal','#iBirth','#iDate','#iOrigin','#iOriginStatus','#iPs1Date','#iPs1Result','#iPs2Date','#iPs2Result'].forEach(sel=>{const el=$(sel);if(el){el.onchange=fill;el.oninput=preview}});$('#saveIntro').onclick=async()=>{fill();const ede=$('#iEde').value.trim(),animalId=digits($('#iAnimal').value),entryDate=readShortDate('#iDate'),birthDate=readShortDate('#iBirth'),ps1Date=readShortDate('#iPs1Date'),ps2Date=readShortDate('#iPs2Date');if(entryDate===null||birthDate===null||ps1Date===null||ps2Date===null)return;if(!ede||!animalId)return toast('EDE et bovin obligatoires');const hh=herdByEde(ede);if(hh&&!norm(hh.mode).includes('garantie'))return toast('Introduction refusée : le cheptel n’est pas en Garantie');const obj={...i,id:old?.id||key(ede,animalId,entryDate||Date.now()),ede,animalId,entryDate,birthDate,origin:$('#iOrigin').value.trim(),originStatus:$('#iOriginStatus').value,ps1Date,ps1Result:$('#iPs1Result').value.trim(),serology:$('#iPs1Result').value.trim(),ps2Date,ps2Result:$('#iPs2Result').value.trim(),pcr:$('#iPcr').value.trim(),result:$('#iResult').value.trim(),excinAgds:$('#iExcinAgds').checked,excinClosed:$('#iExcinClosed').checked,comment:$('#iComment').value.trim()};await db.put('introductions',obj);state.introductions=await db.all('introductions');await touchHerd(ede,'Introduction / contrôles sérologiques mis à jour');closeModal();render();toast('Introduction enregistrée')};if(old&&$('#deleteIntro'))$('#deleteIntro').onclick=async()=>{if(!confirm('Supprimer cette introduction ?'))return;await db.delete('introductions',old.id);state.introductions=await db.all('introductions');closeModal();render()}}
+
+const memoViewHTML_v185_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v185_base()+`<div class="card"><h2>Contrôles après introduction — règle septembre 2026</h2><ol><li><b>PS1 :</b> tout bovin introduit doit être contrôlé en sérologie dès qu’il atteint 18 mois, quelle que soit la qualification du cheptel de provenance.</li><li><b>Introduit avant 18 mois :</b> Paratu calcule automatiquement la date des 18 mois et signale l’échéance.</li><li><b>PS2 :</b> si le bovin provient d’un cheptel non Garantie / sans statut, prévoir une seconde prise de sang au moins 9 mois après PS1.</li><li>Le récapitulatif Excel du rapprochement des introductions contient l’âge à l’introduction, la classe &lt;18 / ≥18 mois, les échéances PS1/PS2 et une alerte de suivi.</li></ol></div>`};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.85 ===== */
