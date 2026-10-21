@@ -1,5 +1,5 @@
 /* Paratuberculose GDS 32-65 v1.2.92 — PWA multi-support */
-const APP_VERSION='1.2.92';
+const APP_VERSION='1.2.93';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -4041,3 +4041,77 @@ importAnimals=async function(file,dept){
 const memoViewHTML_v192_base=memoViewHTML;
 memoViewHTML=function(){return memoViewHTML_v192_base()+`<div class="card"><h2>Rapprochement EXCME depuis l’export global animaux</h2><p>Quand tu exportes depuis Paratu les bovins connus puis que tu les réinterroges dans AGDS, réimporte le fichier dans <b>Animaux 32</b> ou <b>Animaux 65</b>. Paratu lit l’événement EXCME : une <b>date de fin EXCME</b> clôture automatiquement le suivi ; un EXCME présent sans date de fin reste ouvert. Cela évite de reprendre manuellement tout l’historique.</p></div>`};
 /* ===== fin v1.2.92 ===== */
+
+
+/* ===== v1.2.93 — export AGDS ciblé sur les bovins encore présents dans Paratu ===== */
+function presentParatuAnimalRowsForDept_v193(dept){
+  dept=Number(dept);
+  const herdSet=new Set(engagedHerds().filter(h=>Number(h.dept)===dept).map(h=>String(h.ede||'')));
+  const byId=new Map(),ai=animalIndex();
+  const add=(src,kind)=>{
+    const id=String(src?.animalId||'').trim(),ede=String(src?.ede||'').trim();
+    if(!id||!ede||!herdSet.has(ede))return;
+    const eff=effectiveAnimalData(src||{});
+    if(eff.presence!=='Présent')return;
+    const a=ai.get(id)||{};
+    let row=byId.get(id);
+    if(!row){
+      const h=herdByEde(ede)||{};
+      row={
+        'Département':dept,
+        'EDE':ede,
+        'Éleveur':h.name||'',
+        'N° bovin':id,
+        'N° travail':a.workNo||src.workNo||'',
+        'Nom':a.name||src.name||'',
+        'Sexe':a.sex||src.sex||'',
+        'Date naissance':fmtDate(eff.birthDate||a.birthDate||src.birthDate),
+        'Présence':'Présent',
+        'Sources Paratu':new Set()
+      };
+      byId.set(id,row);
+    }
+    row['Sources Paratu'].add(kind);
+  };
+  for(const a of state.animals)add(a,'Base animaux');
+  for(const n of state.nonnegatives)add(n,'Non négatif');
+  for(const d of state.descendants)add(d,'Descendant / EXCME');
+  for(const i of state.introductions)add(i,'Introduction / EXCIN');
+  return [...byId.values()].map(r=>({...r,'Sources Paratu':[...r['Sources Paratu']].join(' + ')}))
+    .sort((a,b)=>String(a.EDE).localeCompare(String(b.EDE),'fr',{numeric:true})||String(a['N° bovin']).localeCompare(String(b['N° bovin']),'fr',{numeric:true}));
+}
+function exportPresentParatuAnimalsExcel_v193(dept){
+  const rows=presentParatuAnimalRowsForDept_v193(dept);
+  if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucun bovin encore présent dans Paratu pour les engagés de ce département'}]);
+  XLSX.utils.book_append_sheet(wb,ws,`PRESENTS_PARATU_${dept}`);
+  XLSX.writeFile(wb,`PTB_bovins_presents_Paratu_${dept}_${today()}.xlsx`);
+  toast(`${rows.length} bovin(s) présents dans Paratu exporté(s) pour le ${dept}`);
+}
+function exportPresentParatuAnimalNumbersCsv_v193(dept){
+  const rows=presentParatuAnimalRowsForDept_v193(dept).map(r=>({'N° bovin':r['N° bovin']}));
+  download(`PTB_bovins_presents_Paratu_${dept}_NUMEROS_${today()}.csv`,toCSV(rows,['N° bovin']),'text/csv;charset=utf-8');
+  toast(`${rows.length} n° bovin présents dans Paratu exporté(s) pour le ${dept}`);
+}
+function presentParatuExportRow_v193(label,dept){
+  return `<tr><td><strong>${esc(label)}</strong><br><small>Uniquement les bovins encore considérés présents dans Paratu</small></td><td><span class="help">calculé à l’export</span></td><td><button class="ghost present-paratu-excel" data-dept="${dept}">Excel complet</button></td><td><button class="primary present-paratu-csv" data-dept="${dept}">CSV N° bovin</button></td></tr>`;
+}
+views.exports=function(){return pageHead('Exports','Exports toujours séparés par département pour AGDS')+
+`<div class="card"><h2>Listes de cheptels engagés</h2><p class="help">Travail séparé 32 / 65. Excel complet = toutes les colonnes disponibles. CSV N° cheptel = une seule colonne pour AGDS.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Nombre</th><th>Excel complet</th><th>CSV AGDS</th></tr></thead><tbody>${herdExportRow('Tous les engagés 32','engages32')}${herdExportRow('Tous les engagés 65','engages65')}${herdExportRow('Garantie 32','garantie32')}${herdExportRow('Garantie 65','garantie65')}${herdExportRow('Assainissement 32','ass32')}${herdExportRow('Assainissement 65','ass65')}</tbody></table></div></div>`+
+`<div class="card"><h2>Bovins à réinterroger dans AGDS</h2><p class="help">On exporte uniquement les bovins encore <b>considérés présents dans Paratu</b>. Comme Paratu ne les sort pas tout seul, ce retour AGDS permet de récupérer les sorties, analyses et l’état EXCME / EXCIN sans envoyer tout l’historique. CSV AGDS = une seule colonne N° bovin.</p><div class="table-wrap"><table><thead><tr><th>Liste</th><th>Effectif</th><th>Excel de contrôle</th><th>CSV AGDS</th></tr></thead><tbody>${presentParatuExportRow_v193('Bovins présents dans Paratu — engagés 32',32)}${presentParatuExportRow_v193('Bovins présents dans Paratu — engagés 65',65)}</tbody></table></div></div>`+
+`<div class="card"><h2>Autres exports de suivi</h2><div class="actions"><button class="ghost export-btn" data-export="nonnegpresent">Non négatifs présents</button><button class="ghost export-btn" data-export="descendants">Descendants</button><button class="ghost export-btn" data-export="introducedAnimals">Bovins introduits</button></div></div>`+
+`<div class="card"><h2>Suivi campagne</h2><div class="actions"><button class="ghost export-btn" data-export="positifs">Cheptels positifs</button><button class="ghost export-btn" data-export="campaignFollowup">Suivi de tous les engagés</button><button class="ghost export-btn" data-export="introductions">Introductions</button></div></div>`+
+`<div class="card"><h2>Sauvegarde complète Excel</h2><button class="primary" id="exportFullExcel">Exporter toute la base en Excel</button></div>`;};
+
+const bindView_v193_base=bindView;
+bindView=function(){
+  bindView_v193_base();
+  if(state.view==='exports'){
+    $$('.present-paratu-excel').forEach(b=>b.onclick=()=>exportPresentParatuAnimalsExcel_v193(Number(b.dataset.dept)));
+    $$('.present-paratu-csv').forEach(b=>b.onclick=()=>exportPresentParatuAnimalNumbersCsv_v193(Number(b.dataset.dept)));
+  }
+};
+const memoViewHTML_v193_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v193_base()+`<div class="card"><h2>Export de contrôle AGDS — bovins présents dans Paratu</h2><ol><li>Dans <b>Exports</b>, sortir séparément le CSV <b>Présents dans Paratu 32</b> ou <b>Présents dans Paratu 65</b>.</li><li>Le CSV contient uniquement les n° des bovins encore considérés présents dans Paratu. Les bovins déjà sortis dans Paratu ne sont pas renvoyés inutilement.</li><li>Interroger ces bovins dans AGDS avec les mouvements, analyses, EXCIN et EXCME puis réimporter le fichier animaux du département dans Paratu.</li><li>Le retour permet de mettre à jour les sorties et les clôtures EXCME/EXCIN. Comme un bovin ne sort pas spontanément de Paratu, cette liste constitue la file de contrôle courante.</li></ol></div>`};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.93 ===== */
