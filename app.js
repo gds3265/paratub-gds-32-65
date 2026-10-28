@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.104 — PWA multi-support */
-const APP_VERSION='1.2.104';
+/* Paratuberculose GDS 32-65 v1.2.105 — PWA multi-support */
+const APP_VERSION='1.2.105';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -4441,32 +4441,46 @@ function excinEventFromAnimalRow_v195(r){
   return{eventEde,start,end,info,present:!!(excinFields.length&&(eventEde||start||end||info||literal))};
 }
 async function reconcileIntroductionsFromAnimalRows_v195(rows,dept){
-  const intros=await db.all('introductions'),exact=new Map(),byAnimal=new Map();
+  const intros=await db.all('introductions'),byEpisode=new Map(),byPair=new Map(),byAnimal=new Map();
   for(const i of intros){
     if(Number(i.dept||herdByEde(i.ede)?.dept||0)!==Number(dept))continue;
-    exact.set(`${String(i.ede||'')}|${String(i.animalId||'')}`,i);
-    const k=String(i.animalId||'');if(k){if(!byAnimal.has(k))byAnimal.set(k,[]);byAnimal.get(k).push(i);}
+    const ede=String(i.ede||''),animal=String(i.animalId||''),entry=dateISO(i.entryDate||i.introductionDate||'');
+    if(ede&&animal&&entry)byEpisode.set(`${ede}|${animal}|${entry}`,i);
+    const pair=`${ede}|${animal}`;if(ede&&animal){if(!byPair.has(pair))byPair.set(pair,[]);byPair.get(pair).push(i);}
+    if(animal){if(!byAnimal.has(animal))byAnimal.set(animal,[]);byAnimal.get(animal).push(i);}
   }
-  let checked=0,events=0,matched=0,closed=0,opened=0;const touched=new Map();
+  let checked=0,events=0,matched=0,closed=0,opened=0,episodeExits=0;const touched=new Map();
   for(const r of rows){
     const animalId=digits(pick(r,'Identifiant bovin'));if(!animalId)continue;
-    const currentEde=digits(pick(r,'Exploitation')),e=excinEventFromAnimalRow_v195(r);
-    let i=exact.get(`${currentEde}|${animalId}`);
-    if(!i&&e.eventEde)i=exact.get(`${e.eventEde}|${animalId}`);
+    const currentEde=digits(pick(r,'Exploitation')),
+      rowEntry=parseFrenchDate(pick(r,'Date entrée')||pick(r,'Date entree')),
+      rowExit=parseFrenchDate(pick(r,'Date sortie')),
+      e=excinEventFromAnimalRow_v195(r);
+    let i=null;
+    if(currentEde&&rowEntry)i=byEpisode.get(`${currentEde}|${animalId}|${rowEntry}`)||null;
+    // Repli seulement s'il n'existe qu'un épisode possible : ne jamais confondre deux retours dans le même élevage.
+    if(!i&&currentEde){const c=byPair.get(`${currentEde}|${animalId}`)||[];if(c.length===1)i=c[0];}
+    if(!i&&e.eventEde&&rowEntry)i=byEpisode.get(`${e.eventEde}|${animalId}|${rowEntry}`)||null;
+    if(!i&&e.eventEde){const c=byPair.get(`${e.eventEde}|${animalId}`)||[];if(c.length===1)i=c[0];}
     if(!i){const c=byAnimal.get(animalId)||[];if(c.length===1)i=c[0];}
     if(!i)continue;
     checked++;
     let obj={...i,agdsLastCheckedAt:new Date().toISOString(),introAgdsCheckedV195:true};
+    // La sortie de l'export animaux appartient à CET épisode lorsqu'EDE + bovin + date d'entrée correspondent.
+    if(rowExit){
+      if(!dateISO(obj.episodeExitDate||obj.exitDate||''))episodeExits++;
+      obj.episodeExitDate=rowExit;obj.exitDate=rowExit;obj.presence='Sorti';
+    }
     if(e.present){
-      events++;matched++;obj={...obj,excinAgds:true,introReviewedV194:true,agdsEventCode:'EXCIN',agdsEventStart:e.start||i.agdsEventStart||'',agdsEventEnd:e.end||'',agdsEventInfo:e.info||i.agdsEventInfo||'',agdsSeenSource:`Export global animaux AGDS ${new Date().toLocaleDateString('fr-FR')}`};
-      if(e.end){if(!i.excinClosed)closed++;obj.excinClosed=true;obj.agdsClosureBaseline=true;obj.agdsClosureBaselineAt=new Date().toISOString();obj.agdsClosureBaselineSig=closureCandidateSignature(obj);}
-      else{if(i.excinClosed)opened++;obj.excinClosed=false;obj.agdsClosureBaseline=false;obj.agdsClosureBaselineSig='';}
+      events++;matched++;obj={...obj,excinAgds:true,introReviewedV194:true,agdsEventCode:'EXCIN',agdsEventStart:e.start||i.agdsEventStart||'',agdsEventEnd:e.end||i.agdsEventEnd||'',agdsEventInfo:e.info||i.agdsEventInfo||'',agdsSeenSource:`Export global animaux AGDS ${new Date().toLocaleDateString('fr-FR')}`};
+      if(e.end){if(!i.excinClosed)closed++;obj.excinClosed=true;obj.excinClosedAt=e.end;obj.agdsClosureBaseline=true;obj.agdsClosureBaselineAt=new Date().toISOString();obj.agdsClosureBaselineSig=closureCandidateSignature(obj);}
+      else if(!rowExit){if(i.excinClosed)opened++;obj.excinClosed=false;obj.agdsClosureBaseline=false;obj.agdsClosureBaselineSig='';}
     }
     touched.set(String(obj.id),obj);
   }
   if(touched.size)await db.bulkPut('introductions',[...touched.values()]);
-  await setMeta('lastExcinGlobalReconcileV195',{dept:Number(dept),date:new Date().toISOString(),checked,events,matched,closed,opened});
-  return{checked,events,matched,closed,opened};
+  await setMeta('lastExcinGlobalReconcileV195',{dept:Number(dept),date:new Date().toISOString(),checked,events,matched,closed,opened,episodeExits});
+  return{checked,events,matched,closed,opened,episodeExits};
 }
 
 /* EXCIN n'est à créer que pour une provenance non Garantie / sans statut. Une provenance Garantie ne doit jamais apparaître dans la file EXCIN. */
@@ -4666,6 +4680,36 @@ Le fichier history_seed.js est régénéré depuis migration/history_seed.json a
 ===== fin v1.2.103 ===== */
 
 
+
+
+/* ===== v1.2.105 — sorties des épisodes d’introduction depuis export animaux AGDS ===== */
+const introFollowupInfo_v1105_base=introFollowupInfo_v185;
+introFollowupInfo_v185=function(i){
+  const f=introFollowupInfo_v1105_base(i),exit=dateISO(i?.episodeExitDate||i?.exitDate||'');
+  if(exit&&!f.ps1Date){
+    const alerts=[`Sorti le ${fmtDate(exit)} sans PS1`];
+    if(i?.excinAgds&&!i?.excinClosed)alerts.push('EXCIN à clôturer à la date de sortie');
+    else if(i?.excinClosed)alerts.push('EXCIN clôturée');
+    else alerts.push('Aucune PS1 à faire dans cet épisode');
+    return {...f,controlLabel:alerts.join(' · '),actionable:!!(i?.excinAgds&&!i?.excinClosed),exitedBeforePs1:true};
+  }
+  return f;
+};
+const introControlCategory_v1105_base=introControlCategory_v186;
+introControlCategory_v186=function(i){
+  const f=introFollowupInfo_v185(i),exit=dateISO(i?.episodeExitDate||i?.exitDate||'');
+  if(exit&&!f.ps1Date)return i?.excinAgds&&!i?.excinClosed?'exitclose':'done';
+  return introControlCategory_v1105_base(i);
+};
+/* Les compteurs PS1/PS2 ne doivent pas compter les épisodes déjà sortis sans contrôle. */
+const introControlRows_v1105_base=introControlRows_v194;
+introControlRows_v194=function(){
+  return introControlRows_v1105_base().map(x=>{
+    const f=introFollowupInfo_v185(x.i),dueCat=introControlCategory_v186(x.i);
+    return {...x,f,dueCat,cat:!x.workActive?'baseline':(!x.reviewed?'verify':dueCat)};
+  });
+};
+/* ===== fin v1.2.105 ===== */
 /* ===== v1.2.104 — date de sortie éditable dans la fiche introduction =====
 - Ajout du champ « Date sortie de cet épisode » dans Modifier/Ajouter une introduction.
 - Une clôture EXCIN exige désormais une date de sortie d'épisode et utilise cette date comme date de fin EXCIN.
