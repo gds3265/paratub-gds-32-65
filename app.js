@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.99 — PWA multi-support */
-const APP_VERSION='1.2.99';
+/* Paratuberculose GDS 32-65 v1.2.100 — PWA multi-support */
+const APP_VERSION='1.2.100';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -43,8 +43,19 @@ function trackingToClose(rec){return !rec?.excinClosed&&closureCandidate(rec)&&!
 function trackingClosureEvidence(rec){const e=effectiveAnimalData(rec),parts=[];if(e.exitDate)parts.push(`Sortie ${fmtDate(e.exitDate)}`);const r=String(rec?.result||rec?.control||rec?.serology||rec?.serologyResult||rec?.repeatSerology||rec?.pcr||rec?.pcrResult||'').trim();if(r&&resultLooksFavorable(rec))parts.push(`Contrôle favorable : ${r}`);return parts.join(' · ')}
 function monthsAgoDate(months){const d=new Date();const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()-months);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return d}
 function motherDescendanceAlertKey(ede,motherId){return `${String(ede||'')}|${String(motherId||'')}`}
+function motherDescendanceManualClosures(){const x=state.meta.motherDescendanceManualClosuresV1100;return x&&typeof x==='object'?x:{}}
+function motherDescendanceVerifiedKeys(){return new Set([...(state.meta.motherDescendanceBaselineVerifiedV145?.keys||[]),...Object.keys(motherDescendanceManualClosures())])}
+async function closeMotherDescendanceAlert(ede,motherId){
+  if(!ensureWrite())return;
+  const key=motherDescendanceAlertKey(ede,motherId);
+  if(!confirm(`Confirmer que la descendance de la mère ${motherId} a bien été vérifiée ?\n\nCette alerte sera clôturée et ne réapparaîtra pas lors des prochains imports.`))return;
+  const all={...motherDescendanceManualClosures(),[key]:{ede:String(ede||''),motherId:String(motherId||''),closedAt:new Date().toISOString()}};
+  await setMeta('motherDescendanceManualClosuresV1100',all);
+  await touchHerd(ede,'Descendance mère sortie vérifiée et alerte clôturée');
+  render();toast('Vérification de descendance clôturée');
+}
 function motherDescendanceAlerts(){
-  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=new Set(state.meta.motherDescendanceBaselineVerifiedV145?.keys||[]);
+  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=motherDescendanceVerifiedKeys();
   for(const n of state.nonnegatives){
     const m=ai.get(String(n.animalId))||{},e=effectiveAnimalData(n),exitDate=e.exitDate;
     if(!exitDate)continue;
@@ -59,7 +70,7 @@ function motherDescendanceAlerts(){
   }
   return out.sort((a,b)=>String(b.exitDate).localeCompare(String(a.exitDate))||String(a.ede).localeCompare(String(b.ede)));
 }
-function motherDescendanceAlertsHTML(){const rows=motherDescendanceAlerts();if(!rows.length)return`<div class="card ok"><b>Descendance des mères sorties :</b> aucune vérification supplémentaire détectée.</div>`;return`<div class="card mother-desc-alert"><div class="page-head"><div><h2>⚠ Mères sorties — descendance à vérifier</h2><p>${rows.length} mère(s) sortie(s) au cours des 18 derniers mois sans veau de moins de 9 mois déjà renseigné. Si un veau &lt; 9 mois est déjà enregistré, l’alerte n’est pas déclenchée.</p></div></div><div class="table-wrap"><table><thead><tr><th>EDE</th><th>Éleveur</th><th>Mère</th><th>Date sortie</th><th>Descendants déjà connus</th><th>Dernier descendant connu</th><th>Action</th></tr></thead><tbody>${rows.slice(0,250).map(r=>`<tr class="click-row" data-herd="${esc(r.ede)}"><td><strong>${esc(r.ede)}</strong></td><td>${esc(r.herdName)}</td><td><strong>${esc(r.motherId)}</strong>${r.motherName?`<br><small>${esc(r.motherName)}</small>`:''}</td><td>${fmtDate(r.exitDate)}</td><td>${r.knownDescendants}</td><td>${fmtDate(r.lastDescendant)}</td><td><span class="campaign-action action-warn">Vérifier la descendance / EXCME</span></td></tr>`).join('')}</tbody></table></div>${rows.length>250?`<p class="help">${rows.length-250} autre(s) alerte(s) non affichée(s) ici.</p>`:''}</div>`}
+function motherDescendanceAlertsHTML(){const rows=motherDescendanceAlerts();if(!rows.length)return`<div class="card ok"><b>Descendance des mères sorties :</b> aucune vérification supplémentaire détectée.</div>`;return`<div class="card mother-desc-alert"><div class="page-head"><div><h2>⚠ Mères sorties — descendance à vérifier</h2><p>${rows.length} mère(s) sortie(s) au cours des 18 derniers mois sans veau de moins de 9 mois déjà renseigné. Si un veau &lt; 9 mois est déjà enregistré, l’alerte n’est pas déclenchée.</p></div></div><div class="table-wrap"><table><thead><tr><th>EDE</th><th>Éleveur</th><th>Mère</th><th>Date sortie</th><th>Descendants déjà connus</th><th>Dernier descendant connu</th><th>Action</th></tr></thead><tbody>${rows.slice(0,250).map(r=>`<tr class="click-row" data-herd="${esc(r.ede)}"><td><strong>${esc(r.ede)}</strong></td><td>${esc(r.herdName)}</td><td><strong>${esc(r.motherId)}</strong>${r.motherName?`<br><small>${esc(r.motherName)}</small>`:''}</td><td>${fmtDate(r.exitDate)}</td><td>${r.knownDescendants}</td><td>${fmtDate(r.lastDescendant)}</td><td><span class="campaign-action action-warn">Vérifier la descendance / EXCME</span><br><button type="button" class="mini-btn mother-desc-close" data-mother-ede="${esc(r.ede)}" data-mother-id="${esc(r.motherId)}" style="margin-top:6px">✓ Descendance vérifiée — clôturer</button></td></tr>`).join('')}</tbody></table></div>${rows.length>250?`<p class="help">${rows.length-250} autre(s) alerte(s) non affichée(s) ici.</p>`:''}</div>`}
 function agdsControlRows(){
   const rows=[];
   for(const d of state.descendants.filter(trackingOpen)){
@@ -930,6 +941,7 @@ function enhanceSortableTables(root=document){
 function bindViewLegacy(){
   $$('[data-go]').forEach(b=>b.onclick=()=>{state.view=b.dataset.go;render()});
   $$('[data-herd]').forEach(r=>r.onclick=()=>openHerd(r.dataset.herd));
+  $$('.mother-desc-close').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();closeMotherDescendanceAlert(b.dataset.motherEde,b.dataset.motherId)});
   $$('.analysis-treat').forEach(b=>b.onclick=e=>{e.stopPropagation();openAnalysisValidation(b.dataset.ede)});
   $$('.analysis-edit').forEach(b=>b.onclick=e=>{e.stopPropagation();openAnalysisForm('',b.dataset.analysisId)});$$('.analysis-manual-list').forEach(b=>b.onclick=e=>{e.stopPropagation();openManualAnalysisList(b.dataset.ede,b.dataset.campaign,b.dataset.ids||'')});
   if($('#herdQ')) $('#herdQ').oninput=e=>{state.herdFilters.q=e.target.value;const rows=filteredHerds();const box=$('#herdTable');if(box){box.innerHTML=herdTable(rows);$$('[data-herd]',box).forEach(r=>r.onclick=()=>openHerd(r.dataset.herd))}const count=$('#herdCount');if(count)count.textContent=rows.length};
@@ -1207,6 +1219,7 @@ async function handleInlineTrackingToggle(input){
 function bindView(){
   $$('[data-go]').forEach(b=>b.onclick=()=>{state.view=b.dataset.go;render()});
   $$('[data-herd]').forEach(r=>r.onclick=()=>openHerd(r.dataset.herd));
+  $$('.mother-desc-close').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();closeMotherDescendanceAlert(b.dataset.motherEde,b.dataset.motherId)});
   $$('.analysis-treat').forEach(b=>b.onclick=e=>{e.stopPropagation();openAnalysisValidation(b.dataset.ede)});
   $$('.analysis-edit').forEach(b=>b.onclick=e=>{e.stopPropagation();openAnalysisForm('',b.dataset.analysisId)});
   if($('#herdQ')) $('#herdQ').oninput=e=>{state.herdFilters.q=e.target.value;const rows=filteredHerds();const box=$('#herdTable');if(box){box.innerHTML=herdTable(rows);$$('[data-herd]',box).forEach(r=>r.onclick=()=>openHerd(r.dataset.herd))}const count=$('#herdCount');if(count)count.textContent=rows.length};
@@ -4521,7 +4534,7 @@ function sexForAnimal_v196(animalId,ede=''){
 animalSex_v194=function(animalId){return sexForAnimal_v196(animalId)};
 
 motherDescendanceAlerts=function(){
-  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=new Set(state.meta.motherDescendanceBaselineVerifiedV145?.keys||[]);
+  const ai=animalIndex(),seen=new Set(),out=[],recentCutoff=monthsAgoDate(18),youngCutoff=monthsAgoDate(9),baseline=motherDescendanceVerifiedKeys();
   for(const n of state.nonnegatives){
     const m=ai.get(String(n.animalId))||{},e=effectiveAnimalData(n),exitDate=e.exitDate;
     if(!exitDate)continue;
@@ -4591,3 +4604,9 @@ Le fichier history_seed.js est régénéré depuis migration/history_seed.json a
 - Correction de l'alternance Garantie : 0I/inter => année intermédiaire suivante ; 0N/année >1 => dépistage 24-72 mois suivant.
 - Réparation automatique des programmations déjà créées lors d'une bascule de campagne (ex. 65216002 en 2026/2027).
 ===== fin v1.2.99 ===== */
+
+/* ===== v1.2.100 — clôture manuelle des alertes de descendance =====
+- Ajout d'un bouton « Descendance vérifiée — clôturer » dans « Mères sorties — descendance à vérifier ».
+- La clôture est mémorisée avec date, EDE et n° de mère et reste acquittée après réimport.
+- Les mâles restent exclus du contrôle de descendance.
+===== fin v1.2.100 ===== */
