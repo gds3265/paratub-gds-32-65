@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.100 — PWA multi-support */
-const APP_VERSION='1.2.100';
+/* Paratuberculose GDS 32-65 v1.2.102 — PWA multi-support */
+const APP_VERSION='1.2.102';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -1599,7 +1599,7 @@ async function importTrackingFile(file,kind){
       excinAgds:!!(old?.excinAgds||hasAgdsEvent),excinClosed:!!(old?.excinClosed||closedInAgds),
       agdsEventCode:code,agdsEventStart:old?.agdsEventStart||eventStart||'',agdsEventEnd:old?.agdsEventEnd||eventEnd||'',agdsEventInfo:old?.agdsEventInfo||eventInfo||'',
       trackingImportDate:today(),trackingSourceFile:file.name||'',trackingLastSeen:today(),
-      ...(isIntro?{introWorkBaselineV187:false,introWorkBatchDateV187:today(),agdsReviewBaselineV157:false}:{})
+      ...(isIntro?{introWorkBaselineV187:false,introWorkBatchDateV187:today(),agdsReviewBaselineV157:false,...(!old?{introReviewedV194:false}:{})}:{})
     };
     const obj=isIntro
       ?{...base,id:old?.id||key(campaign,ede,animalId,entryDate),entryDate}
@@ -2790,6 +2790,21 @@ enhanceExtraViewUI=function(){
 /* ===== fin v1.2.79 ===== */
 
 
+
+async function migrateNewIntroReviewStateV1101(){
+  if(state.meta?.newIntroReviewStateV1101)return;
+  const updates=[];
+  for(const i of state.introductions){
+    // Toute introduction du lot de travail actif doit être explicitement contrôlée par l'utilisateur.
+    // Avant v1.2.101, un originStatus renseigné par l'import pouvait la faire passer automatiquement en « Vérifié ».
+    if(i?.introWorkBaselineV187===false && i?.introReviewedV194===undefined){
+      updates.push({...i,introReviewedV194:false});
+    }
+  }
+  if(updates.length){await db.bulkPut('introductions',updates);state.introductions=await db.all('introductions');}
+  await setMeta('newIntroReviewStateV1101',{date:new Date().toISOString(),updated:updates.length});
+}
+
 async function repairCurrentCampaignProgrammingV199(){
   if(state.meta.currentCampaignProgrammingRepairV199)return;
   const current=String(state.campaign||'');
@@ -2823,7 +2838,7 @@ async function repairCurrentCampaignProgrammingV199(){
   if(campaignUpdates.length||herdUpdates.length)await loadState();
 }
 
-async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await migrateIntroWorkQueueV187();await migrateHistoricalSexV196();await repairHerdModeConsistency();await repairCurrentCampaignProgrammingV199();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
+async function init(){await db.open();await loadState();await restoreAuth();await repairLegacyHistoryCounts();if(!state.meta.campaignUserSet&&state.campaign!=='2025/2026'){state.campaign='2025/2026';await setMeta('currentCampaign',state.campaign)}if(state.herds.length<190||state.campaigns.length<1900){try{await restoreBundledHistory({silent:true});await loadState();await repairLegacyHistoryCounts()}catch(e){console.warn('Historique initial non chargé automatiquement',e)}}else if(state.meta.bundledHistoryLoaded!==APP_VERSION){await setMeta('bundledHistoryLoaded',APP_VERSION)}await applyV157DataUpdate();await applyV158DataUpdate();await initReferenceDirectories();await applyEnd2526QualificationFix();await applyV173Campaign2526Migration();await migrateNextScreeningCoherenceV174();await migrateNextScreeningCoherenceV176();await migrateNonNegativeRegistryV179();await migrateIntroFollowupV186();await migrateIntroWorkQueueV187();await migrateNewIntroReviewStateV1101();await migrateHistoricalSexV196();await repairHerdModeConsistency();await repairCurrentCampaignProgrammingV199();await markExistingTrackingHandledByDefault();await baselineExistingMotherDescendanceAlerts();await baselineExistingAgdsClosureAlerts();populateCampaignSelector();$('#globalCampaign').onchange=async e=>{await changeActiveCampaign(e.target.value)};$('#btnBackup').onclick=makeBackup;const installBtn=$('#btnInstall');if(installBtn){installBtn.onclick=installApp;if(isStandaloneMode()){installBtn.textContent='Appli installée';installBtn.disabled=true;}}$$('.nav-btn').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});if('serviceWorker'in navigator){navigator.serviceWorker.register('/paratub-gds-32-65/sw.js',{scope:'/paratub-gds-32-65/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}render()}
 init().catch(e=>{$('#app').innerHTML=`<div class="error">Erreur au démarrage : ${esc(e.message)}</div>`;console.error(e)});
 
 /* v1.2.56 : branchements remboursement + exports + actions vues fiabilisés */
@@ -4243,6 +4258,7 @@ function introControlRowHTML_v194(x){
     <td data-sort-value="${esc(digits(i.animalId||''))}"><strong>${esc(i.animalId||'')}</strong></td>
     <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="introReviewedV194" ${reviewed?'checked':''}> ${reviewed?'Oui':'Non'}</label></td>
     <td>${fmtDate(i.entryDate||i.introductionDate)}<div class="help">${esc(f.ageClass)} · 18 mois ${fmtDate(f.date18m)}</div></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="excinAgds" ${i.excinAgds?'checked':''}> ${i.excinAgds?'Oui':'Non'}</label></td>
     <td>${esc(i.origin||'')}<select class="intro-central-field" data-field="originStatus">${introStatusOptions_v186(i.originStatus||'')}</select></td>
     <td><input class="short-date intro-central-field compact-input" data-field="ps1Date" value="${esc(shortDateValue(f.ps1Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps1Result" value="${esc(f.ps1Result||'')}" placeholder="résultat"></td>
     <td><select class="intro-central-field" data-field="ps2RequiredOverride">${introPs2OverrideOptions_v186(i.ps2RequiredOverride||'')}</select><div class="help">Calcul : ${esc(f.ps2RequiredLabel)}</div></td>
@@ -4255,14 +4271,14 @@ introControlPanel_v186=function(){
   const all=introControlRows_v194(),active=all.filter(x=>x.workActive),verify=active.filter(x=>!x.reviewed),ps1=active.filter(x=>x.dueCat==='ps1'),ps2=active.filter(x=>x.dueCat==='ps2');
   return `<div class="card" id="introControlPanel"><div class="page-head"><div><h2>Contrôles après introduction — gestion centralisée</h2><p><b>À vérifier</b> signifie uniquement que tu n’as pas encore contrôlé la ligne. Une EXCIN sans date de fin n’est pas une anomalie : une fois vérifiée, elle sort de cette file et reste suivie par les échéances PS1 / PS2.</p></div><div class="actions"><button class="ghost" id="refreshIntroFollowup">Recalculer les introductions existantes</button><button class="primary" id="exportIntroFollowup">Exporter le suivi Excel</button></div></div>
   <div class="grid kpi-grid"><button class="campaign-kpi intro-followup-kpi" data-intro-filter="verify"><span>À vérifier</span><strong>${verify.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps1"><span>PS1 à faire</span><strong>${ps1.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps2"><span>PS2 à faire</span><strong>${ps2.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="all"><span>Lot actif</span><strong>${active.length}</strong></button></div>
-  <div class="table-tools"><select id="introDeptFilter"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="introFollowupFilter"><option value="verify">À vérifier</option><option value="ps1">PS1 à faire maintenant</option><option value="ps2">PS2 à faire maintenant</option><option value="all">Toutes les introductions du lot actif</option></select><span class="help">Dès que tu modifies le statut de provenance ou une PS, la ligne est considérée vérifiée. Tu peux aussi cocher/décocher « Vérifié » directement.</span></div>
-  <div class="table-wrap"><table class="sortable-table" data-table-kind="intro-central"><thead><tr><th>N° cheptel (EDE) / éleveur</th><th>N° bovin</th><th data-nosort="1">Vérifié</th><th>Introduction / âge</th><th>Provenance / statut</th><th>PS1</th><th>PS2 requise</th><th>PS2 à partir du</th><th>PS2</th><th>Alerte</th></tr></thead><tbody id="introFollowupBody"></tbody></table></div><p class="help" id="introFollowupCount"></p></div>`;
+  <div class="table-tools"><select id="introDeptFilter"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="introFollowupFilter"><option value="verify">À vérifier</option><option value="ps1">PS1 à faire maintenant</option><option value="ps2">PS2 à faire maintenant</option><option value="all">Toutes les introductions du lot actif</option></select><span class="help">Tu peux d’abord cocher « EXCIN », puis renseigner la provenance et les PS. La ligne est considérée vérifiée quand tu modifies le statut de provenance ou une PS. Tu peux aussi cocher/décocher « Vérifié » directement.</span></div>
+  <div class="table-wrap"><table class="sortable-table" data-table-kind="intro-central"><thead><tr><th>N° cheptel (EDE) / éleveur</th><th>N° bovin</th><th data-nosort="1">Vérifié</th><th>Introduction / âge</th><th data-nosort="1">EXCIN</th><th>Provenance / statut</th><th>PS1</th><th>PS2 requise</th><th>PS2 à partir du</th><th>PS2</th><th>Alerte</th></tr></thead><tbody id="introFollowupBody"></tbody></table></div><p class="help" id="introFollowupCount"></p></div>`;
 };
 applyIntroFollowupFilter_v186=function(value){
   const f=value||'verify',dept=$('#introDeptFilter')?.value||'',all=introControlRows_v194().filter(x=>x.workActive&&(!dept||String(x.dept)===dept));
   let selected=f==='all'?all:f==='verify'?all.filter(x=>!x.reviewed):all.filter(x=>x.dueCat===f);
   const tbody=$('#introFollowupBody');if(!tbody)return;
-  const cap=700,visible=selected.slice(0,cap);tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v194).join(''):'<tr><td colspan="10">Aucune introduction dans ce filtre.</td></tr>';
+  const cap=700,visible=selected.slice(0,cap);tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v194).join(''):'<tr><td colspan="11">Aucune introduction dans ce filtre.</td></tr>';
   bindIntroCentralFields_v186();if(typeof enhanceSortableTables==='function')enhanceSortableTables(tbody);
   const c=$('#introFollowupCount');if(c)c.textContent=`${selected.length} ligne(s)${selected.length>cap?` · ${selected.length-cap} non affichée(s) pour préserver les performances`:''}`;
 };
@@ -4272,14 +4288,16 @@ saveIntroCentralRow_v186=async function(el){
   const tr=el.closest('tr[data-intro-id]'),id=tr?.dataset.introId,idx=state.introductions.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
   let obj={...state.introductions[idx]},field=el.dataset.field;
   if(field==='introReviewedV194')obj.introReviewedV194=!!el.checked;
-  else{
+  else if(field==='excinAgds'){
+    obj.excinAgds=!!el.checked;
+  }else{
     let val=el.value;
     if(field==='ps1Date'||field==='ps2Date'){const iso=dateISO(val);if(val.trim()&&!iso){toast('Date invalide : utiliser JJMMAA ou JJ/MM/AA');return;}obj[field]=iso||'';}else obj[field]=val;
     if(field==='ps1Result')obj.serology=val;
     obj.introReviewedV194=true;
   }
-  await db.put('introductions',obj);state.introductions[idx]=obj;await touchHerd(obj.ede,'Suivi introduction vérifié / mis à jour');
-  applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'verify');toast('Suivi introduction enregistré');
+  await db.put('introductions',obj);state.introductions[idx]=obj;await touchHerd(obj.ede,field==='excinAgds'?'EXCIN introduction mis à jour':'Suivi introduction vérifié / mis à jour');
+  applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'verify');toast(field==='excinAgds'?'EXCIN mis à jour':'Suivi introduction enregistré');
 };
 
 function descendantBulkRows_v194(){
@@ -4610,3 +4628,17 @@ Le fichier history_seed.js est régénéré depuis migration/history_seed.json a
 - La clôture est mémorisée avec date, EDE et n° de mère et reste acquittée après réimport.
 - Les mâles restent exclus du contrôle de descendance.
 ===== fin v1.2.100 ===== */
+
+
+/* ===== v1.2.101 — nouvelles introductions toujours à vérifier =====
+- Une nouvelle introduction créée par import AGDS démarre explicitement avec « Vérifié = Non ».
+- Le statut de provenance importé ne suffit plus à faire disparaître une nouvelle ligne de la file « À vérifier ».
+- Migration automatique des introductions du lot actif créées avant ce correctif et jamais vérifiées manuellement.
+===== fin v1.2.101 ===== */
+
+
+/* ===== v1.2.102 — EXCIN saisissable depuis le suivi centralisé des introductions =====
+- Ajout de la case « EXCIN » directement dans « Contrôles après introduction — gestion centralisée ».
+- La colonne EXCIN est placée avant « Provenance / statut » pour permettre un enregistrement complet depuis cette grille.
+- Cocher/décocher EXCIN ne marque plus automatiquement la ligne comme vérifiée ; la ligne peut donc rester visible jusqu'à la saisie du statut de provenance ou des PS.
+===== fin v1.2.102 ===== */
