@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.102 — PWA multi-support */
-const APP_VERSION='1.2.102';
+/* Paratuberculose GDS 32-65 v1.2.103 — PWA multi-support */
+const APP_VERSION='1.2.103';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -28,7 +28,7 @@ const num=v=>Number(String(v??'').replace(',','.'))||0;
 const key=(...p)=>p.map(x=>String(x??'')).join('|');
 function campaignFromDate(v){const d=v instanceof Date?v:new Date(v); if(isNaN(d))return''; const y=d.getFullYear(); return d.getMonth()>=6?`${y}/${y+1}`:`${y-1}/${y}`}
 function addMonths(v,months){if(!v)return'';const iso=dateISO(v);const d=v instanceof Date?new Date(v):new Date(iso||v);if(isNaN(d))return'';const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+months);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return d.toISOString().slice(0,10)}
-function effectiveAnimalData(rec){const a=animalIndex().get(String(rec?.animalId||''))||{};const exitDate=rec?.exitDate||a.exitDate||'';return{animal:a,exitDate,presence:exitDate?'Sorti':'Présent',birthDate:rec?.birthDate||a.birthDate||'',motherId:rec?.motherId||a.motherId||''}}
+function effectiveAnimalData(rec){const a=animalIndex().get(String(rec?.animalId||''))||{},isIntro=!!(rec?.entryDate||rec?.introductionDate);const exitDate=isIntro?(rec?.episodeExitDate||rec?.exitDate||''):(rec?.exitDate||a.exitDate||'');return{animal:a,exitDate,presence:exitDate?'Sorti':'Présent',birthDate:rec?.birthDate||a.birthDate||'',motherId:rec?.motherId||a.motherId||''}}
 function resultLooksFavorable(rec){const t=norm([rec?.result,rec?.control,rec?.serology,rec?.serologyResult,rec?.repeatSerology,rec?.conclusion].join(' '));return t.includes('negatif')||t.includes('negative')||t.includes('favorable')||t.includes('presume non infecte')||t==='ok'}
 function closureCandidate(rec){return !!effectiveAnimalData(rec).exitDate||resultLooksFavorable(rec)}
 function nonNegativeOpen(rec){return effectiveAnimalData(rec).presence==='Présent'&&!rec?.conclusion&&!norm(rec?.followupStatus).includes('conclusion')}
@@ -1586,14 +1586,14 @@ async function importTrackingFile(file,kind){
       :existing.find(x=>String(x.ede)===String(ede)&&String(x.animalId)===String(animalId));
 
     const oldSnapshot=old?{excinAgds:!!old.excinAgds,excinClosed:!!old.excinClosed,exitDate:old.exitDate||'',result:old.result||old.control||''}:null;
-    const a=animalIndex().get(String(animalId))||{},effectiveExit=old?.exitDate||exitDate||a.exitDate||'',campaign=old?.campaign||campaignFromDate(entryDate||birthDate)||state.campaign;
+    const a=animalIndex().get(String(animalId))||{},effectiveExit=isIntro?(old?.episodeExitDate||old?.exitDate||exitDate||''):(old?.exitDate||exitDate||a.exitDate||''),campaign=old?.campaign||campaignFromDate(entryDate||birthDate)||state.campaign;
     const base={
       ...(old||{}),ede,dept:Number(ede.slice(0,2)),campaign,animalId,
       birthDate:old?.birthDate||birthDate||a.birthDate||'',motherId:old?.motherId||motherId||a.motherId||'',
       origin:old?.origin||origin||'',originStatus:old?.originStatus||originStatus||'',
       ps1Date:old?.ps1Date||ps1Date||'',ps1Result:old?.ps1Result||ps1Result||old?.serology||'',
       ps2Date:old?.ps2Date||ps2Date||'',ps2Result:old?.ps2Result||ps2Result||'',
-      exitDate:effectiveExit,presence:effectiveExit?'Sorti':'Présent',result:old?.result||result||'',
+      exitDate:effectiveExit,...(isIntro?{episodeExitDate:effectiveExit}:{}),presence:effectiveExit?'Sorti':'Présent',result:old?.result||result||'',
       // Une fiche Excel historique signifie que l'événement EXCIN/EXCME a déjà été vu et saisi dans AGDS.
       // Les nouveaux animaux issus des listes AGDS restent "à traiter" jusqu'à ce qu'un événement soit retrouvé.
       excinAgds:!!(old?.excinAgds||hasAgdsEvent),excinClosed:!!(old?.excinClosed||closedInAgds),
@@ -3717,7 +3717,7 @@ function applyIntroFollowupFilter_v186(value){
 }
 function exportIntroFollowup_v186(){
   const rows=introControlRows_v186().map(({i,h,f,cat})=>({
-    'Département':h.dept||i.dept||'','EDE':i.ede,'Éleveur':h.name||'','N° bovin':i.animalId,'Date introduction':fmtDate(i.entryDate||i.introductionDate),'Date naissance':fmtDate(f.birth),'Âge à introduction (mois)':f.ageMonths??'','Classe âge':f.ageClass,'18 mois le':fmtDate(f.date18m),'Cheptel provenance':i.origin||'','Statut provenance':f.originLabel,'Date PS1':fmtDate(f.ps1Date),'Résultat PS1':f.ps1Result||'','PS2 requise':f.ps2Required?'Oui':'Non','Mode PS2':i.ps2RequiredOverride||'Auto','PS2 à partir du':fmtDate(f.ps2Due),'Date PS2':fmtDate(f.ps2Date),'Résultat PS2':f.ps2Result||'','Alerte / action':f.controlLabel,'Catégorie':cat
+    'Département':h.dept||i.dept||'','EDE':i.ede,'Éleveur':h.name||'','N° bovin':i.animalId,'Date introduction':fmtDate(i.entryDate||i.introductionDate),'Date sortie épisode':fmtDate(effectiveAnimalData(i).exitDate),'EXCIN présente':i.excinAgds?'Oui':'Non','EXCIN clôturée':i.excinClosed?'Oui':'Non','Date clôture EXCIN':fmtDate(i.excinClosedAt||i.agdsEventEnd||''),'Date naissance':fmtDate(f.birth),'Âge à introduction (mois)':f.ageMonths??'','Classe âge':f.ageClass,'18 mois le':fmtDate(f.date18m),'Cheptel provenance':i.origin||'','Statut provenance':f.originLabel,'Date PS1':fmtDate(f.ps1Date),'Résultat PS1':f.ps1Result||'','PS2 requise':f.ps2Required?'Oui':'Non','Mode PS2':i.ps2RequiredOverride||'Auto','PS2 à partir du':fmtDate(f.ps2Due),'Date PS2':fmtDate(f.ps2Date),'Résultat PS2':f.ps2Result||'','Alerte / action':f.controlLabel,'Catégorie':cat
   }));
   if(!window.XLSX)return toast('Bibliothèque Excel indisponible');
   const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune introduction'}]);XLSX.utils.book_append_sheet(wb,ws,'SUIVI_INTRODUCTIONS');XLSX.writeFile(wb,`PTB_suivi_introductions_PS1_PS2_${today()}.xlsx`);toast('Suivi introductions exporté');
@@ -4252,33 +4252,36 @@ function introControlRows_v194(){
   });
 }
 function introControlRowHTML_v194(x){
-  const {i,h,f,cat,reviewed}=x;
-  return `<tr class="intro-control-row" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-dept="${x.dept||''}">
+  const {i,h,f,cat,reviewed}=x,e=effectiveAnimalData(i),exitBeforePs1=!!(e.exitDate&&!f.ps1Date);
+  const alert=exitBeforePs1&&!i.excinClosed?`Sorti avant PS1 · clôturer EXCIN au ${fmtDate(e.exitDate)} · ${f.controlLabel}`:f.controlLabel;
+  return `<tr class="intro-control-row ${e.exitDate?'animal-exited-row':''}" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-dept="${x.dept||''}">
     <td data-sort-value="${esc(digits(i.ede||''))}">${esc(i.ede||'')}<div class="help">${esc(h.name||'')}</div></td>
     <td data-sort-value="${esc(digits(i.animalId||''))}"><strong>${esc(i.animalId||'')}</strong></td>
     <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="introReviewedV194" ${reviewed?'checked':''}> ${reviewed?'Oui':'Non'}</label></td>
     <td>${fmtDate(i.entryDate||i.introductionDate)}<div class="help">${esc(f.ageClass)} · 18 mois ${fmtDate(f.date18m)}</div></td>
+    <td><input class="short-date intro-central-field compact-input" data-field="episodeExitDate" value="${esc(shortDateValue(e.exitDate||''))}" placeholder="JJMMAA"><div class="help">${e.exitDate?'Sorti':'Présent sur cet épisode'}</div></td>
     <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="excinAgds" ${i.excinAgds?'checked':''}> ${i.excinAgds?'Oui':'Non'}</label></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="excinClosed" ${i.excinClosed?'checked':''}> ${i.excinClosed?'Oui':'Non'}</label>${i.excinClosed&&e.exitDate?`<div class="help">au ${fmtDate(e.exitDate)}</div>`:''}</td>
     <td>${esc(i.origin||'')}<select class="intro-central-field" data-field="originStatus">${introStatusOptions_v186(i.originStatus||'')}</select></td>
     <td><input class="short-date intro-central-field compact-input" data-field="ps1Date" value="${esc(shortDateValue(f.ps1Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps1Result" value="${esc(f.ps1Result||'')}" placeholder="résultat"></td>
     <td><select class="intro-central-field" data-field="ps2RequiredOverride">${introPs2OverrideOptions_v186(i.ps2RequiredOverride||'')}</select><div class="help">Calcul : ${esc(f.ps2RequiredLabel)}</div></td>
     <td class="intro-ps2-due">${fmtDate(f.ps2Due)}${f.ps2Required&&!f.ps2Due?'<div class="help">PS1 nécessaire</div>':''}</td>
     <td><input class="short-date intro-central-field compact-input" data-field="ps2Date" value="${esc(shortDateValue(f.ps2Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps2Result" value="${esc(f.ps2Result||'')}" placeholder="résultat"></td>
-    <td class="intro-control-alert"><span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span></td>
+    <td class="intro-control-alert"><span class="tracking-status ${f.actionable||exitBeforePs1?'warn':''}">${esc(alert)}</span></td>
   </tr>`;
 }
 introControlPanel_v186=function(){
   const all=introControlRows_v194(),active=all.filter(x=>x.workActive),verify=active.filter(x=>!x.reviewed),ps1=active.filter(x=>x.dueCat==='ps1'),ps2=active.filter(x=>x.dueCat==='ps2');
   return `<div class="card" id="introControlPanel"><div class="page-head"><div><h2>Contrôles après introduction — gestion centralisée</h2><p><b>À vérifier</b> signifie uniquement que tu n’as pas encore contrôlé la ligne. Une EXCIN sans date de fin n’est pas une anomalie : une fois vérifiée, elle sort de cette file et reste suivie par les échéances PS1 / PS2.</p></div><div class="actions"><button class="ghost" id="refreshIntroFollowup">Recalculer les introductions existantes</button><button class="primary" id="exportIntroFollowup">Exporter le suivi Excel</button></div></div>
   <div class="grid kpi-grid"><button class="campaign-kpi intro-followup-kpi" data-intro-filter="verify"><span>À vérifier</span><strong>${verify.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps1"><span>PS1 à faire</span><strong>${ps1.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="ps2"><span>PS2 à faire</span><strong>${ps2.length}</strong></button><button class="campaign-kpi intro-followup-kpi" data-intro-filter="all"><span>Lot actif</span><strong>${active.length}</strong></button></div>
-  <div class="table-tools"><select id="introDeptFilter"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="introFollowupFilter"><option value="verify">À vérifier</option><option value="ps1">PS1 à faire maintenant</option><option value="ps2">PS2 à faire maintenant</option><option value="all">Toutes les introductions du lot actif</option></select><span class="help">Tu peux d’abord cocher « EXCIN », puis renseigner la provenance et les PS. La ligne est considérée vérifiée quand tu modifies le statut de provenance ou une PS. Tu peux aussi cocher/décocher « Vérifié » directement.</span></div>
-  <div class="table-wrap"><table class="sortable-table" data-table-kind="intro-central"><thead><tr><th>N° cheptel (EDE) / éleveur</th><th>N° bovin</th><th data-nosort="1">Vérifié</th><th>Introduction / âge</th><th data-nosort="1">EXCIN</th><th>Provenance / statut</th><th>PS1</th><th>PS2 requise</th><th>PS2 à partir du</th><th>PS2</th><th>Alerte</th></tr></thead><tbody id="introFollowupBody"></tbody></table></div><p class="help" id="introFollowupCount"></p></div>`;
+  <div class="table-tools"><select id="introDeptFilter"><option value="">32 + 65</option><option value="32">32</option><option value="65">65</option></select><select id="introFollowupFilter"><option value="verify">À vérifier</option><option value="ps1">PS1 à faire maintenant</option><option value="ps2">PS2 à faire maintenant</option><option value="all">Toutes les introductions du lot actif</option></select><span class="help">Chaque ligne correspond à un épisode d’introduction (EDE + bovin + date d’entrée). Renseigne la sortie de cet épisode si le bovin repart ; l’EXCIN peut alors être clôturée à cette date. Un retour ultérieur dans le même élevage reste une nouvelle ligne indépendante.</span></div>
+  <div class="table-wrap"><table class="sortable-table" data-table-kind="intro-central"><thead><tr><th>N° cheptel (EDE) / éleveur</th><th>N° bovin</th><th data-nosort="1">Vérifié</th><th>Introduction / âge</th><th>Sortie épisode</th><th data-nosort="1">EXCIN</th><th data-nosort="1">Clôturée</th><th>Provenance / statut</th><th>PS1</th><th>PS2 requise</th><th>PS2 à partir du</th><th>PS2</th><th>Alerte</th></tr></thead><tbody id="introFollowupBody"></tbody></table></div><p class="help" id="introFollowupCount"></p></div>`;
 };
 applyIntroFollowupFilter_v186=function(value){
   const f=value||'verify',dept=$('#introDeptFilter')?.value||'',all=introControlRows_v194().filter(x=>x.workActive&&(!dept||String(x.dept)===dept));
   let selected=f==='all'?all:f==='verify'?all.filter(x=>!x.reviewed):all.filter(x=>x.dueCat===f);
   const tbody=$('#introFollowupBody');if(!tbody)return;
-  const cap=700,visible=selected.slice(0,cap);tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v194).join(''):'<tr><td colspan="11">Aucune introduction dans ce filtre.</td></tr>';
+  const cap=700,visible=selected.slice(0,cap);tbody.innerHTML=visible.length?visible.map(introControlRowHTML_v194).join(''):'<tr><td colspan="13">Aucune introduction dans ce filtre.</td></tr>';
   bindIntroCentralFields_v186();if(typeof enhanceSortableTables==='function')enhanceSortableTables(tbody);
   const c=$('#introFollowupCount');if(c)c.textContent=`${selected.length} ligne(s)${selected.length>cap?` · ${selected.length-cap} non affichée(s) pour préserver les performances`:''}`;
 };
@@ -4288,16 +4291,26 @@ saveIntroCentralRow_v186=async function(el){
   const tr=el.closest('tr[data-intro-id]'),id=tr?.dataset.introId,idx=state.introductions.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
   let obj={...state.introductions[idx]},field=el.dataset.field;
   if(field==='introReviewedV194')obj.introReviewedV194=!!el.checked;
-  else if(field==='excinAgds'){
-    obj.excinAgds=!!el.checked;
+  else if(field==='excinAgds')obj.excinAgds=!!el.checked;
+  else if(field==='excinClosed'){
+    if(el.checked){
+      const exit=dateISO(obj.episodeExitDate||obj.exitDate||'');
+      if(!exit){el.checked=false;return toast('Renseigne d’abord la date de sortie de cet épisode pour clôturer l’EXCIN à la bonne date.');}
+      obj.excinAgds=true;obj.excinClosed=true;obj.agdsEventEnd=exit;obj.excinClosedAt=exit;
+    }else{obj.excinClosed=false;obj.agdsEventEnd='';obj.excinClosedAt='';}
+  }else if(field==='episodeExitDate'){
+    const val=el.value,iso=dateISO(val);if(val.trim()&&!iso){toast('Date de sortie invalide : utiliser JJMMAA ou JJ/MM/AA');return;}
+    obj.episodeExitDate=iso||'';obj.exitDate=iso||'';obj.presence=iso?'Sorti':'Présent';
   }else{
     let val=el.value;
     if(field==='ps1Date'||field==='ps2Date'){const iso=dateISO(val);if(val.trim()&&!iso){toast('Date invalide : utiliser JJMMAA ou JJ/MM/AA');return;}obj[field]=iso||'';}else obj[field]=val;
     if(field==='ps1Result')obj.serology=val;
     obj.introReviewedV194=true;
   }
-  await db.put('introductions',obj);state.introductions[idx]=obj;await touchHerd(obj.ede,field==='excinAgds'?'EXCIN introduction mis à jour':'Suivi introduction vérifié / mis à jour');
-  applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'verify');toast(field==='excinAgds'?'EXCIN mis à jour':'Suivi introduction enregistré');
+  await db.put('introductions',obj);state.introductions[idx]=obj;
+  await touchHerd(obj.ede,field==='episodeExitDate'?'Sortie épisode introduction mise à jour':field==='excinClosed'?'Clôture EXCIN mise à jour':field==='excinAgds'?'EXCIN introduction mis à jour':'Suivi introduction vérifié / mis à jour');
+  applyIntroFollowupFilter_v186($('#introFollowupFilter')?.value||'verify');
+  toast(field==='episodeExitDate'?'Sortie de l’épisode enregistrée':field==='excinClosed'?'Clôture EXCIN enregistrée':field==='excinAgds'?'EXCIN mis à jour':'Suivi introduction enregistré');
 };
 
 function descendantBulkRows_v194(){
@@ -4642,3 +4655,12 @@ Le fichier history_seed.js est régénéré depuis migration/history_seed.json a
 - La colonne EXCIN est placée avant « Provenance / statut » pour permettre un enregistrement complet depuis cette grille.
 - Cocher/décocher EXCIN ne marque plus automatiquement la ligne comme vérifiée ; la ligne peut donc rester visible jusqu'à la saisie du statut de provenance ou des PS.
 ===== fin v1.2.102 ===== */
+
+
+/* ===== v1.2.103 — introductions suivies par épisode de séjour =====
+- Une introduction est désormais traitée comme un épisode indépendant identifié par EDE + bovin + date d’entrée.
+- La sortie globale actuelle du bovin n’est plus utilisée pour fermer une ancienne introduction.
+- Ajout de « Sortie épisode » et « Clôturée » dans la gestion centralisée.
+- Une EXCIN clôturée depuis la grille prend comme date de fin la date de sortie de l’épisode.
+- Un retour ultérieur du même bovin dans le même élevage conserve un nouveau suivi séparé.
+===== fin v1.2.103 ===== */
