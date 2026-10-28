@@ -1,5 +1,5 @@
-/* Paratuberculose GDS 32-65 v1.2.105 — PWA multi-support */
-const APP_VERSION='1.2.105';
+/* Paratuberculose GDS 32-65 v1.2.106 — PWA multi-support */
+const APP_VERSION='1.2.106';
 const DB_NAME='ptb_gds_32_65';
 const DB_VERSION=1;
 const STORES=['herds','campaigns','nonnegatives','descendants','introductions','animals','analysisLots','analysisTreatments','meta'];
@@ -4715,3 +4715,143 @@ introControlRows_v194=function(){
 - Une clôture EXCIN exige désormais une date de sortie d'épisode et utilise cette date comme date de fin EXCIN.
 - La sortie est propre à l'épisode EDE + bovin + date d'introduction, sans reprendre la sortie globale du bovin.
 ===== fin v1.2.104 ===== */
+
+
+/* ===== v1.2.106 — règle EXCIN/PS paramétrable selon provenance ===== */
+function introExcinPolicy_v1106(){
+  return String(state.meta.introExcinPolicyV1106||'origin_based');
+}
+function introPolicyDecision_v1106(i){
+  const policy=introExcinPolicy_v1106(),originState=originGuaranteeState_v185(i);
+  if(policy==='all_until_ps1'){
+    return {policy,originState,excinRequired:true,ps2Required:originState===false,
+      short:'EXCIN jusqu’à PS1 pour toute provenance',
+      detail:originState===false?'EXCIN jusqu’à PS1 puis PS2 à +9 mois':'EXCIN jusqu’à PS1 ; pas de PS2 si provenance Garantie / favorable'};
+  }
+  if(originState===true)return {policy,originState,excinRequired:false,ps2Required:false,short:'PS1 sans EXCIN',detail:'Provenance Garantie / favorable : PS1 requise, sans EXCIN ; pas de PS2.'};
+  if(originState===false)return {policy,originState,excinRequired:true,ps2Required:true,short:'EXCIN jusqu’à PS1 puis PS2',detail:'Provenance non Garantie / sans statut : EXCIN jusqu’à la PS1, clôture à la PS1, puis PS2 à +9 mois.'};
+  return {policy,originState,excinRequired:null,ps2Required:null,short:'Provenance à qualifier',detail:'Qualifier la provenance : Garantie = PS1 sans EXCIN ; non Garantie = EXCIN jusqu’à PS1 puis PS2 à +9 mois.'};
+}
+function introPolicySummary_v1106(){
+  if(introExcinPolicy_v1106()==='all_until_ps1')return 'Règle active : EXCIN jusqu’à la PS1 pour toutes les introductions. Après PS1, PS2 uniquement si provenance non Garantie.';
+  return 'Règle active : provenance Garantie = PS1 sans EXCIN ; provenance non Garantie = EXCIN jusqu’à la PS1, puis clôture EXCIN et PS2 à +9 mois.';
+}
+function introPolicySettingsHTML_v1106(){
+  const p=introExcinPolicy_v1106();
+  return `<div class="card" id="introPolicySettings"><h2>Règle introductions — EXCIN / PS1 / PS2</h2><p class="help">Cette règle pilote les alertes et la liste Contrôle AGDS. Elle reste visible dans le suivi centralisé pour rappeler le mode de calcul.</p><div class="field"><label>Politique EXCIN</label><select id="introExcinPolicy"><option value="origin_based" ${p==='origin_based'?'selected':''}>Selon provenance — Garantie : PS1 sans EXCIN ; non Garantie : EXCIN jusqu’à PS1 puis PS2</option><option value="all_until_ps1" ${p==='all_until_ps1'?'selected':''}>EXCIN pour toutes les introductions jusqu’à PS1 (ancien fonctionnement)</option></select></div><div class="notice" style="margin-top:10px">${esc(introPolicySummary_v1106())}</div><div class="actions" style="margin-top:10px"><button class="primary" id="saveIntroExcinPolicy">Enregistrer la règle</button></div></div>`;
+}
+
+const introFollowupInfo_v1106_base=introFollowupInfo_v185;
+introFollowupInfo_v185=function(i){
+  const f=introFollowupInfo_v1106_base(i),d=introPolicyDecision_v1106(i),exit=dateISO(i?.episodeExitDate||i?.exitDate||''),hasPs1=!!f.ps1Date;
+  let label=String(f.controlLabel||'');
+  if(exit&&!hasPs1){
+    if(d.excinRequired===false)label=`Sorti le ${fmtDate(exit)} sans PS1 · aucune EXCIN requise pour cette provenance`;
+    else if(d.excinRequired===true){
+      if(i?.excinClosed)label=`Sorti le ${fmtDate(exit)} sans PS1 · EXCIN clôturée`;
+      else if(i?.excinAgds)label=`Sorti le ${fmtDate(exit)} sans PS1 · EXCIN à clôturer au ${fmtDate(exit)}`;
+      else label=`Sorti le ${fmtDate(exit)} sans PS1 · EXCIN manquante : créer puis clôturer au ${fmtDate(exit)}`;
+    }else label=`Sorti le ${fmtDate(exit)} sans PS1 · provenance à qualifier pour déterminer l’EXCIN`;
+  }else if(!hasPs1){
+    if(d.excinRequired===false)label=`${label} · Règle : PS1 sans EXCIN`;
+    else if(d.excinRequired===true)label=`${label} · Règle : EXCIN jusqu’à PS1`;
+    else label=`${label} · Règle EXCIN : qualifier la provenance`;
+  }else if(d.originState===false&&!f.ps2Date){
+    label=`${label} · Après PS1 : EXCIN à clôturer si ouverte, puis PS2 à +9 mois`;
+  }else if(d.originState===true){
+    label=`${label} · Provenance Garantie : pas de PS2`;
+  }
+  return {...f,controlLabel:label,policyDecision:d};
+};
+
+/* Politique métier dans Contrôle AGDS. */
+agdsControlRows=function(){
+  const rows=[];
+  for(const d of state.descendants){
+    const h=herdByEde(d.ede)||{},e=effectiveAnimalData(d),st=descState_v194(d);
+    if(st==='closed'||st==='ok'||st==='ignoredMale')continue;
+    let category='À vérifier AGDS',evidence='';
+    if(st==='missing')category='Créer EXCME AGDS';
+    if(st==='close'){category=d.excinAgds?'À clôturer AGDS':'Créer + clôturer AGDS';evidence=trackingClosureEvidence(d);}
+    rows.push({kind:'Descendant',code:'EXCME',id:d.id,ede:d.ede,herdName:h.name||'',animalId:d.animalId,motherId:e.motherId||d.motherId||'',entryDate:'',birthDate:e.birthDate||'',exitDate:e.exitDate||'',result:d.result||d.control||'',agdsKnown:!!d.excinAgds,category,evidence,paratuAfter:st==='close'?'Le retour AGDS permettra de confirmer la clôture EXCME.':st==='missing'?'Créer l’EXCME dans AGDS puis marquer la ligne vérifiée.':'Vérifier si un EXCME existe dans AGDS.'});
+  }
+  for(const i of state.introductions){
+    const h=herdByEde(i.ede)||{};
+    if(!introReceivingHerdIsGuarantee_v189(i)||i.introWorkBaselineV187||i.excinClosed)continue;
+    const e=effectiveAnimalData(i),known=!!i.excinAgds,hasPs1=introHasFirstPS_v196(i),decision=introPolicyDecision_v1106(i),exit=dateISO(i.episodeExitDate||i.exitDate||'');
+
+    if(decision.excinRequired===null){
+      if(!hasPs1&&!known)rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:exit,result:'',agdsKnown:false,category:'Statut provenance à vérifier',evidence:'',paratuAfter:'Qualifier la provenance : Garantie = PS1 sans EXCIN ; non Garantie = EXCIN jusqu’à PS1 puis PS2.'});
+      continue;
+    }
+
+    if(hasPs1){
+      if(!known)continue; // pas de création rétroactive d'EXCIN après PS1
+      const evidence=trackingClosureEvidence(i)||'PS1 réalisée';
+      rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:exit,result:i.ps1Result||i.serology||i.serologyResult||i.result||i.control||'',agdsKnown:true,category:'À clôturer AGDS',evidence,paratuAfter:decision.originState===false?'Après clôture EXCIN : PS2 à 9 mois après la PS1.':'Après clôture de cet ancien EXCIN : aucune PS2 si provenance Garantie / favorable.'});
+      continue;
+    }
+
+    if(exit){
+      if(decision.excinRequired===false)continue;
+      rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:exit,result:'',agdsKnown:known,category:known?'À clôturer AGDS':'Créer + clôturer AGDS',evidence:`Sortie le ${fmtDate(exit)} avant PS1`,paratuAfter:`Clôturer l’EXCIN au ${fmtDate(exit)}. Aucun contrôle PS1 à faire après la sortie de cet épisode.`});
+      continue;
+    }
+
+    if(decision.excinRequired===false)continue; // Garantie : PS1 suivie, mais aucune EXCIN à créer.
+    if(known)continue; // EXCIN ouverte, attente PS1.
+    rows.push({kind:'Introduction',code:'EXCIN',id:i.id,ede:i.ede,herdName:h.name||'',animalId:i.animalId,motherId:'',entryDate:i.entryDate||i.introductionDate||'',birthDate:e.birthDate||'',exitDate:'',result:'',agdsKnown:false,category:'Créer EXCIN AGDS',evidence:'',paratuAfter:'EXCIN à garder ouverte jusqu’à la PS1 ; après PS1, clôturer l’EXCIN et prévoir une PS2 à +9 mois.'});
+  }
+  return rows.sort((a,b)=>String(a.ede).localeCompare(String(b.ede),'fr',{numeric:true})||String(a.animalId).localeCompare(String(b.animalId),'fr',{numeric:true}));
+};
+
+/* Ligne centralisée : rappel de la règle et prévention des EXCIN inutiles sur provenance Garantie. */
+introControlRowHTML_v194=function(x){
+  const {i,h,f,cat,reviewed}=x,e=effectiveAnimalData(i),d=introPolicyDecision_v1106(i),exit=dateISO(i.episodeExitDate||i.exitDate||'');
+  const disableExcin=d.excinRequired===false&&!i.excinAgds;
+  return `<tr class="intro-control-row ${exit?'animal-exited-row':''}" data-intro-id="${esc(i.id)}" data-intro-cat="${esc(cat)}" data-dept="${x.dept||''}">
+    <td data-sort-value="${esc(digits(i.ede||''))}">${esc(i.ede||'')}<div class="help">${esc(h.name||'')}</div></td>
+    <td data-sort-value="${esc(digits(i.animalId||''))}"><strong>${esc(i.animalId||'')}</strong></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="introReviewedV194" ${reviewed?'checked':''}> ${reviewed?'Oui':'Non'}</label></td>
+    <td>${fmtDate(i.entryDate||i.introductionDate)}<div class="help">${esc(f.ageClass)} · 18 mois ${fmtDate(f.date18m)}</div></td>
+    <td><input class="short-date intro-central-field compact-input" data-field="episodeExitDate" value="${esc(shortDateValue(exit||''))}" placeholder="JJMMAA"><div class="help">${exit?'Sorti':'Présent sur cet épisode'}</div></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="excinAgds" ${i.excinAgds?'checked':''} ${disableExcin?'disabled':''}> ${i.excinAgds?'Oui':disableExcin?'Non requise':'Non'}</label><div class="help">${esc(d.short)}</div></td>
+    <td data-nosort="1"><label class="inline-check"><input type="checkbox" class="intro-central-field" data-field="excinClosed" ${i.excinClosed?'checked':''} ${!i.excinAgds?'disabled':''}> ${i.excinClosed?'Oui':'Non'}</label>${i.excinClosed&&exit?`<div class="help">au ${fmtDate(exit)}</div>`:''}</td>
+    <td>${esc(i.origin||'')}<select class="intro-central-field" data-field="originStatus">${introStatusOptions_v186(i.originStatus||'')}</select></td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps1Date" value="${esc(shortDateValue(f.ps1Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps1Result" value="${esc(f.ps1Result||'')}" placeholder="résultat"></td>
+    <td><select class="intro-central-field" data-field="ps2RequiredOverride">${introPs2OverrideOptions_v186(i.ps2RequiredOverride||'')}</select><div class="help">Calcul : ${esc(f.ps2RequiredLabel)}</div></td>
+    <td class="intro-ps2-due">${fmtDate(f.ps2Due)}${f.ps2Required&&!f.ps2Due?'<div class="help">PS1 nécessaire</div>':''}</td>
+    <td><input class="short-date intro-central-field compact-input" data-field="ps2Date" value="${esc(shortDateValue(f.ps2Date||''))}" placeholder="JJMMAA"><input class="intro-central-field compact-input" data-field="ps2Result" value="${esc(f.ps2Result||'')}" placeholder="résultat"></td>
+    <td class="intro-control-alert"><span class="tracking-status ${f.actionable?'warn':''}">${esc(f.controlLabel)}</span></td>
+  </tr>`;
+};
+
+const introControlPanel_v1106_base=introControlPanel_v186;
+introControlPanel_v186=function(){
+  const html=introControlPanel_v1106_base();
+  return html.replace('<div class="page-head">',`<div class="notice" style="margin-bottom:12px"><b>Règle métier active :</b> ${esc(introPolicySummary_v1106())}</div><div class="page-head">`);
+};
+
+const openIntroForm_v1106_base=openIntroForm;
+openIntroForm=function(defaultEde='',editId=''){
+  const r=openIntroForm_v1106_base(defaultEde,editId);
+  const body=$('#modalBody');if(body){const h=body.querySelector('h2');if(h){const n=document.createElement('div');n.className='notice';n.style.marginBottom='12px';n.innerHTML=`<b>Règle métier active :</b> ${esc(introPolicySummary_v1106())}`;h.insertAdjacentElement('afterend',n);}}
+  return r;
+};
+
+const settingsView_v1106_base=views.settings;
+views.settings=function(){return settingsView_v1106_base()+introPolicySettingsHTML_v1106();};
+const bindView_v1106_base=bindView;
+bindView=function(){
+  bindView_v1106_base();
+  if(state.view==='settings'&&$('#saveIntroExcinPolicy'))$('#saveIntroExcinPolicy').onclick=async()=>{
+    if(!ensureWrite())return;
+    await setMeta('introExcinPolicyV1106',$('#introExcinPolicy').value||'origin_based');
+    render();toast('Règle introductions enregistrée');
+  };
+};
+
+const memoViewHTML_v1106_base=memoViewHTML;
+memoViewHTML=function(){return memoViewHTML_v1106_base()+`<div class="card"><h2>Règle EXCIN / PS paramétrable</h2><p>${esc(introPolicySummary_v1106())}</p><p class="help">Cette règle se change dans Paramètres → Règle introductions — EXCIN / PS1 / PS2. La provenance Garantie impose toujours une PS1 ; dans le mode actuel elle ne génère pas d’EXCIN. La provenance non Garantie génère une EXCIN jusqu’à PS1, puis une PS2 à +9 mois.</p></div>`;};
+views.memo=function(){return memoViewHTML()};
+/* ===== fin v1.2.106 ===== */
